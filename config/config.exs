@@ -12,7 +12,7 @@ config :grayjay_jellyfin_plugin,
 
 # Configures the endpoint
 config :grayjay_jellyfin_plugin, GrayjayJellyfinPluginWeb.Endpoint,
-  url: [host: "localhost"],
+  url: [host: "BigArchBoi"],
   adapter: Bandit.PhoenixAdapter,
   render_errors: [
     formats: [html: GrayjayJellyfinPluginWeb.ErrorHTML, json: GrayjayJellyfinPluginWeb.ErrorJSON],
