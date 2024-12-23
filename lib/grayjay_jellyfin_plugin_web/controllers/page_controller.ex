@@ -35,7 +35,7 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
       author: "awlexus",
       authorUrl: "https://github.com/awlexus",
       sourceUrl: url(~p"/plugin_config/#{host}?#{query_params}"),
-      scriptUrl: url(~p"/plugin_script/#{host}?#{query_params}"),
+      scriptUrl: static_url(conn, "/js/client.js"),
       version: 1,
       id: "1d00dfbf-aa8d-4e3a-8d52-d63e5999fe09",
       packages: ["Http"],
@@ -43,57 +43,6 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
       allowUrls: ["everywhere"],
       constants: params
     })
-  end
-
-  def script(conn, _) do
-    script =
-      EEx.eval_string("""
-      let config = {};
-
-      function authHeaders() {
-        return {
-          "authorization": `MediaBrowser Token="${config.constants.token}"`
-        }
-      }
-
-      source.enable = function(conf) {
-        config = conf;
-
-        return config;
-      }
-
-      source.searchSuggestions = function() {
-        return [];
-      }
-
-      source.getHome = function(continuationToken) {
-        const resp = http.GET(`${config.constants.host}/Items?sortOrder=Descending&sortBy=DateCreated&in`, authHeaders(), false);
-        
-        if (!resp.isOk) {
-          console.log(resp)
-          throw new ScriptException("Could not fetch home");
-        }
-       
-        const videos = JSON.parse(resp.body).Items.map(function(item) {
-          console.log(item);
-
-          return new PlatformVideo({
-            id: new PlatformID("Jellyfin", item.Id, config.id),
-            name: item.Name,
-            thumbnails: new Thumbnails([new Thumbnail(`${config.constants.host}/Items/${item.Id}/Primary`)]),
-            uploadDate: new Date(item.DateCreated).getTime() / 1000,
-            url: `${config.constants.host}/items/${item.Id}`,
-            isLive: false
-          });
-        });
-        const hasMore = false;
-        const context = { continuationToken };
-        
-        return new VideoPager(videos, hasMore, context);
-      }
-      """)
-
-    send_resp(conn, 200, script)
   end
 
   def login(host, username, password, device_name) do

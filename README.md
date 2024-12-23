@@ -2,15 +2,19 @@
 
 Grayjay doesn't offer a way to authenticate with Jellyfin, so this server has become a necessity to achieve this.
 
+Note: This project is in a very early state and currently not in a usable state.
+
 ## Usage
 In order to add a plugin for your personal server it has to be exposed to a public domain, if you want to access
 it externally. To add a plugin for your own server you have to start the server and access it on port 4000.
 There you can enter your the url to your jellyfin server. Scan the generated QR code with your Grayjay app
 and start watching your content.
 
+
 ## Roadmap
 
-* [ ] Authorization
+* [x] Authorization
+* [x] Get latest media in Home
 * [ ] Search function
   * [ ] Shows (Channel)
   * [ ] Episodes (Video)
@@ -22,7 +26,7 @@ and start watching your content.
   * [ ] Audio playback
   * [ ] Video playback
 * [ ] Creators
-  * [ ] Show as channel
+  * [x] Series as Channel
   * [ ] Actors
   * [ ] Song interpreters
 * [ ] Playlists
@@ -32,14 +36,18 @@ and start watching your content.
 
 # Development
 
-To start your Phoenix server:
+## Plugin code
+The code for the plugin itself can be found under `/priv/static/js/client.js`. 
 
-  * Run `mix setup` to install and setup dependencies
-  * Start Phoenix endpoint with `mix phx.server` or inside IEx with `iex -S mix phx.server`
+## Start the server
+
+In order to start developing you need to start the software. 
+
+1) Please be sure to have (Elixir)[https://elixir-lang.org/install.html] installed.
+2) Run `mix setup` to install and setup dependencies
+3) Start Phoenix endpoint with `mix phx.server` or inside IEx with `iex -S mix phx.server`
 
 Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
-
-Ready to run in production? Please [check our deployment guides](https://hexdocs.pm/phoenix/deployment.html).
 
 ## Learn more
 
