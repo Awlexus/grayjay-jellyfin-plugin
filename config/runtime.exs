@@ -20,6 +20,24 @@ if System.get_env("PHX_SERVER") do
   config :grayjay_jellyfin_plugin, GrayjayJellyfinPluginWeb.Endpoint, server: true
 end
 
+ip_address =
+  with {:ok, addresses} <- :inet.getif() do
+    Enum.find_value(addresses, fn
+      {{192, 168, c, d}, _, _} -> "192.168.#{c}.#{d}"
+      _ -> nil
+    end)
+  else
+    _ -> nil
+  end
+
+host = System.get_env("PHX_HOST") || ip_address || "example.com"
+port = String.to_integer(System.get_env("PORT") || "4000")
+
+if config_env() == :dev do
+  config :grayjay_jellyfin_plugin, GrayjayJellyfinPluginWeb.Endpoint,
+    url: [host: host, port: port, scheme: "http"]
+end
+
 if config_env() == :prod do
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you
@@ -32,9 +50,6 @@ if config_env() == :prod do
       environment variable SECRET_KEY_BASE is missing.
       You can generate one by calling: mix phx.gen.secret
       """
-
-  host = System.get_env("PHX_HOST") || "example.com"
-  port = String.to_integer(System.get_env("PORT") || "4000")
 
   config :grayjay_jellyfin_plugin, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 

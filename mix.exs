@@ -54,7 +54,8 @@ defmodule GrayjayJellyfinPlugin.MixProject do
       {:dns_cluster, "~> 0.1.1"},
       {:bandit, "~> 1.5"},
       {:qr_code, "~> 3.1"},
-      {:req, "~> 0.5.6"}
+      {:req, "~> 0.5.6"},
+      {:uuidv7, "~> 1.0"}
     ]
   end
 

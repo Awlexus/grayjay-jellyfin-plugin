@@ -18,10 +18,9 @@ defmodule GrayjayJellyfinPluginWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+    post "/", PageController, :home
     get "/plugin_config/:host", PageController, :config
     get "/plugin_script/:host", PageController, :script
-    get "/login/:host", PageController, :login
-    post "/login/:host", PageController, :login
   end
 
   # Other scopes may use custom stacks.

@@ -5,8 +5,11 @@
     <h1 class="text-4xl">Grayjay Jellyfin plugin</h1>
     <h2 class="text-3xl"> Enter your server url to start</h2>
 
-    <.form :let={f} for={@conn.params} class="flex flex-col gap-y-2 mt-3">
+    <.form :let={f} for={@conn.params} class="flex flex-col gap-y-2 mt-3" action="/">
       <.input field={f[:url]} placeholder="Server url" label="Server url"/>
+      <.input field={f[:username]} placeholder="Username" label="Username"/>
+      <.input field={f[:password]} placeholder="Password" label="Password" type="password"/>
+      <.input field={f[:device_name]} placeholder="Device name" label="Device name (Optional)" />
       <.button>Generate QR code</.button>
     </.form>
 
@@ -15,7 +18,7 @@
       <%= raw(@qr_code) %>
 
       <p class="mt-4">Or use this url</p>
-      <p class="mt-4"><%= @host %></p>
+      <p class="mt-4"><%= @url %></p>
 
     </div>
   </div>
