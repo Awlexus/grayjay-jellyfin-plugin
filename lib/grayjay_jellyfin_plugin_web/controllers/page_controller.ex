@@ -38,6 +38,7 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
       authorUrl: "https://github.com/awlexus",
       sourceUrl: url(~p"/plugin_config/#{host}?#{query_params}"),
       scriptUrl: static_url(conn, "/js/client.js"),
+      iconUrl: static_url(conn, "/images/jellyfin-logo.svg"),
       version: @plugin_version,
       id: "1d00dfbf-aa8d-4e3a-8d52-d63e5999fe09",
       packages: ["Http"],
