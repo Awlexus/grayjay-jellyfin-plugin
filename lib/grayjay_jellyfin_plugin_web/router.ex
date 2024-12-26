@@ -20,7 +20,6 @@ defmodule GrayjayJellyfinPluginWeb.Router do
     get "/", PageController, :home
     post "/", PageController, :home
     get "/plugin_config/:host", PageController, :config
-    get "/plugin_script/:host", PageController, :script
   end
 
   # Other scopes may use custom stacks.

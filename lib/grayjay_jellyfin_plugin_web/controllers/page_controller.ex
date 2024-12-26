@@ -62,8 +62,6 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
 
     url = "#{host}/Users/AuthenticateByName"
 
-    dbg()
-
     case Req.post(url, json: body, headers: headers) do
       {:ok, %Req.Response{status: 200, body: %{"AccessToken" => access_token}}} ->
         {:ok, Map.put(header_keys, :token, access_token)}
@@ -71,7 +69,6 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
       _ ->
         :error
     end
-    |> dbg()
   end
 
   defp prepare_host(url) do
@@ -88,19 +85,5 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
     }
 
     to_string(uri)
-  end
-
-  def script_auth(conn, _) do
-    conn.cookies |> dbg()
-
-    case conn.cookies["authorization"] |> dbg() do
-      [header] ->
-        json(conn, %{header: header})
-
-      _ ->
-        conn
-        |> put_status(401)
-        |> json(%{error: %{message: "Unauthorized. Please log in"}})
-    end
   end
 end
