@@ -1,6 +1,8 @@
 defmodule GrayjayJellyfinPluginWeb.PageController do
   use GrayjayJellyfinPluginWeb, :controller
 
+  @plugin_version 1
+
   def home(conn, %{"url" => url, "username" => username, "password" => password} = params) do
     host = prepare_host(url)
 
@@ -36,7 +38,7 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
       authorUrl: "https://github.com/awlexus",
       sourceUrl: url(~p"/plugin_config/#{host}?#{query_params}"),
       scriptUrl: static_url(conn, "/js/client.js"),
-      version: 1,
+      version: @plugin_version,
       id: "1d00dfbf-aa8d-4e3a-8d52-d63e5999fe09",
       packages: ["Http"],
       allowEval: false,
@@ -50,7 +52,7 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
 
     header_keys = %{
       client: "Grayjay client",
-      version: 1,
+      version: @plugin_version,
       device_id: UUIDv7.generate(),
       device_name: device_name
     }
