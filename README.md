@@ -23,8 +23,11 @@ and start watching your content.
   * [ ] Staff/Actors (Channel)
   * [ ] Albums (Playlist)
 * [ ] Media Playback 
-  * [ ] Audio playback
-  * [ ] Video playback
+  * [x] Audio playback
+  * [ ] Video playback - Not quite there yet
+    * [ ] Some videos play audio, but no video
+    * [ ] Duration is not properly shown in player
+  * [x] Subttile playback
 * [ ] Creators
   * [x] Series as Channel
   * [ ] Actors
