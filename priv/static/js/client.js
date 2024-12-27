@@ -71,9 +71,24 @@ source.getContentDetails = function(url) {
       }));
     }
 
-    // if (mediaStream.Type == "Subtitle") {
-    //   subtitles.push()
-    // }
+    if (mediaStream.Type == "Subtitle") {
+      const url =  toUrl(`/Videos/${details.Id}/${mediaSource.Id}/Subtitles/${mediaStream.Index}/0/Stream.vtt`);
+      subtitles.push({
+        name: mediaStream.Title,
+        url: url,
+        format: 'text/vtt',
+
+        getSubtitles() {
+          const resp = http.GET(url, authHeaders(), false);
+
+          if (!resp.isOk) {
+            throw new ScriptException(error || "Could not fetch subtitles");
+          }
+
+          return resp.body;
+        }
+      })
+    }
   }
   
 
