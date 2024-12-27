@@ -74,7 +74,7 @@ source.getContentDetails = function(url) {
     if (mediaStream.Type == "Subtitle") {
       const url =  toUrl(`/Videos/${details.Id}/${mediaSource.Id}/Subtitles/${mediaStream.Index}/0/Stream.vtt`);
       subtitles.push({
-        name: mediaStream.Title,
+        name: mediaStream.DisplayTitle,
         url: url,
         format: 'text/vtt',
 
