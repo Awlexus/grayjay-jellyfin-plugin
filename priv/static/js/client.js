@@ -153,7 +153,7 @@ function videoContent(details, mediaSources, itemId) {
 }
 
 source.isChannelUrl = function(url) {
-  return isType(url, ["Series"]);
+  return isType(url, ["Series", "Album"]);
 }
 
 source.getChannel = function(url) {
