@@ -35,3 +35,4 @@ grayjay_jellyfin_plugin-*.tar
 npm-debug.log
 /assets/node_modules/
 
+.ssh/
