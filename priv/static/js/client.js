@@ -25,7 +25,7 @@ source.getHome = function(continuationToken) {
       isLive: false,
       author: new PlatformAuthorLink(new PlatformID(PLATFORM, item.SeriesId, config.id),
         item.SeriesName,
-        toUrl(`/Items?ids=${item.Id}&type=Series`),
+        toUrl(`/Items/${item.Id}?type=Series`),
         toUrl(`/Items/${item.SeriesId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`)
       )
     });
@@ -37,7 +37,7 @@ source.getHome = function(continuationToken) {
 }
 
 source.isContentDetailsUrl = function(url) {
-  return isType(url, ["Episode", "Video"]);
+  return isType(url, ["Episode", "Video", "Audio"]);
 }
 
 source.getContentDetails = function(url) {
@@ -48,18 +48,23 @@ source.getContentDetails = function(url) {
   // TODO: Apply batching
 
   const details = jsonRequest(toUrl(`/Items/${itemId}?fields=DateCreated`)).body;
-
   const mediaSources = jsonRequest(toUrl(`/Items/${itemId}/PlaybackInfo`)).body;
-  const mediaSource = mediaSources.MediaSources[0];
 
+  switch (details.Type) {
+    case "Episode":
+      return videoContent(details, mediaSources, itemId);
+
+    case "Audio":
+      return audioContent(details, mediaSources, itemId);
+  }
+}
+
+function extractSources(mediaSource, itemId) {
   let sources = [];
   let subtitles = [];
 
   for (const mediaStream of mediaSource.MediaStreams) {
     if (mediaStream.Type == "Video") {
-      // console.log(mediaSource.RunTimeTicks)
-      // console.log(mediaSource.RunTimeTicks / 1000)
-      // console.log(mediaSource.RunTimeTicks / 1_000_000)
       sources.push(new VideoUrlSource({
         codec: mediaStream.codec,
         name: mediaStream.DisplayTitle,
@@ -67,7 +72,16 @@ source.getContentDetails = function(url) {
         height: mediaStream.Height,
         duration: Math.round(mediaSource.RunTimeTicks / 10_000_000),
         container: `video/${mediaSource.container}`,
-        url: toUrl(`/Videos/${itemId}/stream`)
+      }));
+    }
+
+    if (mediaStream.Type == "Audio") {
+      sources.push(new AudioUrlSource({
+        name: mediaStream.Type,
+        bitrate: mediaStream.Bitrate,
+        container: mediaStream.Container,
+        duration: Math.round(mediaSource.RunTimeTicks / 10_000_000),
+        url: toUrl(`/Audio/${itemId}/stream`)
       }));
     }
 
@@ -91,12 +105,39 @@ source.getContentDetails = function(url) {
     }
   }
   
+  return { sources, subtitles }
+}
+
+function audioContent(details, mediaSources, itemId) {
+  let {sources, subtitles} = extractSources(mediaSources.MediaSources[0], itemId)
 
   return new PlatformVideoDetails({
-    id: new PlatformID(PLATFORM, details.id, config.id),
+    id: new PlatformID(PLATFORM, details.Id, config.id),
+    author: new PlatformAuthorLink(new PlatformID(PLATFORM, details.AlbumId, config.id),
+      details.Album,
+      toUrl(`/Items/${details.AlbumId}?type=Album`),
+      toUrl(`/Items/${details.AlbumId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`)
+    ),
+    name: details.Name,
+    thumbnails: new Thumbnails([new Thumbnail(toUrl(`/Items/${details.Id}/Images/Primary?fillWidth=480&quality=90`))]),
+    dateTime: new Date(details.PremiereDate || details.DateCreated).getTime() / 1000,
+    duration: Math.round(details.RunTimeTicks / 10_000_000),
+    viewCount: null,
+    isLive: false,
+    description: null,
+    subtitles: subtitles,
+    video: new UnMuxVideoSourceDescriptor([], sources)
+  })
+}
+
+function videoContent(details, mediaSources, itemId) {
+  let {sources, subtitles} = extractSources(mediaSources.MediaSources[0], itemId)
+
+  return new PlatformVideoDetails({
+    id: new PlatformID(PLATFORM, details.Id, config.id),
     author: new PlatformAuthorLink(new PlatformID(PLATFORM, details.SeriesId, config.id),
       details.SeriesName,
-      toUrl(`/Items?ids=${details.Id}&type=Series`),
+      toUrl(`/Items/${details.Id}?type=Series`),
       toUrl(`/Items/${details.SeriesId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`)
     ),
     name: details.Name,
@@ -131,6 +172,96 @@ source.getChannel = function(url) {
     description: channel.Overview,
     url: url.toString(),
   });
+}
+
+source.searchSuggestions = function(searchTerm) {
+  try {
+    const resp = jsonRequest(toUrl(`/Search/Hints?searchTerm=${searchTerm}`));
+
+    return resp.body.SearchHints.map((item) => item.Name).filter(onlyUnique);
+  } catch(e) {
+    console.error(e)
+    return [];
+  }
+}
+
+source.getSearchCapabilities = function() {
+	return {
+		types: [Type.Feed.Mixed, Type.Feed.Streams, Type.Feed.Videos],
+		sorts: []
+	};
+};
+
+source.search = function(query, type, order, filters, channelId) {
+  let url = new URL(toUrl(`/Search/Hints`));
+  url.searchParams.append("SearchTerm", query);
+
+  if (type != null) {
+    // TODO
+  }
+
+  if (order != null) {
+    // TODO
+  }
+
+  if (filters != null) {
+    // TODO
+  }
+
+  if (channelId != null) {
+    // TODO
+  }
+
+  const resp = jsonRequest(url.toString());
+
+  const entries = resp
+    .body
+    .SearchHints
+    .filter((item) => ["Audio", "Video"].includes(item.MediaType))
+    .map((item) => {
+      let data = {};
+      switch (item.Type) {
+        case "Episode":
+          data = {
+            id: new PlatformID(PLATFORM, item.Id, config.id),
+            name: item.Name,
+            thumbnails: new Thumbnails([new Thumbnail(toUrl(`/Items/${item.Id}/Images/Primary?fillWidth=480&quality=90`))]),
+            // uploadDate: new Date(item.DateCreated).getTime() / 1000,
+            url: `${config.constants.host}/Items/${item.Id}?type=Video`,
+            duration: Math.round(item.RunTimeTicks / 10_000_000),
+            isLive: false,
+            author: new PlatformAuthorLink(new PlatformID(PLATFORM, item.SeriesId, config.id),
+              item.SeriesName,
+              toUrl(`/Items/${item.Id}?type=Series`),
+              toUrl(`/Items/${item.SeriesId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`)
+            )
+          };
+          break;
+
+        case "Audio":
+          data = {
+            id: new PlatformID(PLATFORM, item.Id, config.id),
+            name: item.Name,
+            thumbnails: new Thumbnails([new Thumbnail(toUrl(`/Items/${item.Id}/Images/Primary?fillWidth=480&quality=90`))]),
+            // uploadDate: new Date(item.DateCreated).getTime() / 1000,
+            url: `${config.constants.host}/Items/${item.Id}?type=Audio`,
+            duration: Math.round(item.RunTimeTicks / 10_000_000),
+            isLive: false,
+            author: new PlatformAuthorLink(new PlatformID(PLATFORM, item.AlbumId, config.id),
+              item.Album,
+              toUrl(`/Items/${item.AlbumId}?type=Album`),
+              toUrl(`/Items/${item.AlbumId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`)
+            )
+          };
+          break;
+      }
+      return new PlatformVideo(data);
+    });
+  const hasMore = false;
+  const context = {};
+
+  // TODO: Add support for pagination
+  return new VideoPager(entries, hasMore, context);
 }
 
 // HELPERS
@@ -172,4 +303,8 @@ function isType(url, types) {
   } else {
     return false;    
   }
+}
+
+function onlyUnique(value, index, array) {
+  return array.indexOf(value) == index;
 }
