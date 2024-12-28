@@ -25,7 +25,7 @@ source.getHome = function(continuationToken) {
       isLive: false,
       author: new PlatformAuthorLink(new PlatformID(PLATFORM, item.SeriesId, config.id),
         item.SeriesName,
-        toUrl(`/Items/${item.Id}?type=Series`),
+        toUrl(`/Items/${item.SeriesId}?type=Series`),
         toUrl(`/Items/${item.SeriesId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`)
       )
     });
@@ -115,7 +115,7 @@ function audioContent(details, mediaSources, itemId) {
     id: new PlatformID(PLATFORM, details.Id, config.id),
     author: new PlatformAuthorLink(new PlatformID(PLATFORM, details.AlbumId, config.id),
       details.Album,
-      toUrl(`/Items/${details.AlbumId}?type=Album`),
+      toUrl(`/Items/${details.AlbumId}?type=MusicAlbum`),
       toUrl(`/Items/${details.AlbumId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`)
     ),
     name: details.Name,
@@ -137,7 +137,7 @@ function videoContent(details, mediaSources, itemId) {
     id: new PlatformID(PLATFORM, details.Id, config.id),
     author: new PlatformAuthorLink(new PlatformID(PLATFORM, details.SeriesId, config.id),
       details.SeriesName,
-      toUrl(`/Items/${details.Id}?type=Series`),
+      toUrl(`/Items/${details.SeriesId}?type=Series`),
       toUrl(`/Items/${details.SeriesId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`)
     ),
     name: details.Name,
@@ -153,25 +153,44 @@ function videoContent(details, mediaSources, itemId) {
 }
 
 source.isChannelUrl = function(url) {
-  return isType(url, ["Series", "Album"]);
+  return isType(url, ["Series", "MusicAlbum"]);
 }
 
 source.getChannel = function(url) {
-  const resp = jsonRequest(url);
-  const channel = resp.body;
+  const req = jsonRequest(url);
+  const resp = req.body;
   let parsed = new URL(url);
+  parsed.searchParams.set('type', resp.Type);
 
-  url.SearchParams.set('type', channel.Type);
+  console.log(req)
 
-  return new PlatformChannel({
-    id: new PlatformID(PLATFORM, channel.Id, config.id),
-    name: channel.Name,
-    thumbnail: toUrl(`/Items/${item.SeriesId}/Images/Primary?fillWidth=256&fillHeight=256&quality=90`),
-    banner: toUrl(`/Items/${item.SeriesId}/Images/BackDrop/0?fillWidth=256&fillHeight=256&quality=90`),
-    subscribers: null,
-    description: channel.Overview,
-    url: url.toString(),
-  });
+  switch (resp.Type) {
+    case "Series":
+      return new PlatformChannel({
+        id: new PlatformID(PLATFORM, resp.Id, config.id),
+        name: resp.Name,
+        thumbnail: toUrl(`/Items/${resp.SeriesId}/Images/Primary?fillWidth=256&fillHeight=256&quality=90`),
+        banner: toUrl(`/Items/${resp.SeriesId}/Images/BackDrop/0?fillWidth=256&fillHeight=256&quality=90`),
+        subscribers: null,
+        description: resp.Overview,
+        url: parsed.toString(),
+      });
+    case "MusicAlbum":
+      let externalUrls = new Map();
+      resp.ExternalUrls.forEach((entry) =>  map_push_duplicate(externalUrls, entry.Name, entry.Url));
+
+      return new PlatformChannel({
+        id: new PlatformID(PLATFORM, resp.Id, config.id),
+        name: resp.Name,
+        thumbnail: toUrl(`/Items/${resp.SeriesId}/Images/Primary?fillWidth=256&fillHeight=256&quality=90`),
+        banner: toUrl(`/Items/${resp.SeriesId}/Images/BackDrop/0?fillWidth=256&fillHeight=256&quality=90`),
+        subscribers: null,
+        description: resp.Overview,
+        url: parsed.toString(),
+        links: externalUrls
+      });
+  }
+
 }
 
 source.searchSuggestions = function(searchTerm) {
@@ -249,7 +268,7 @@ source.search = function(query, type, order, filters, channelId) {
             isLive: false,
             author: new PlatformAuthorLink(new PlatformID(PLATFORM, item.AlbumId, config.id),
               item.Album,
-              toUrl(`/Items/${item.AlbumId}?type=Album`),
+              toUrl(`/Items/${item.AlbumId}?type=MusicAlbum`),
               toUrl(`/Items/${item.AlbumId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`)
             )
           };
@@ -307,4 +326,20 @@ function isType(url, types) {
 
 function onlyUnique(value, index, array) {
   return array.indexOf(value) == index;
+}
+
+function map_push_duplicate(map, key, value, index) {
+  let insertKey = key;
+
+  if (index != null) {
+    insertKey = insertKey + ` ${index}`;
+  } else {
+    index = 1;
+  }
+
+  if (map.has(insertKey)) {
+    map_push_duplicate(map, key, value, index + 1);
+  } else {
+    map.set(insertKey, value);
+  }
 }
