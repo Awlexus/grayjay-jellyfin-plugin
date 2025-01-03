@@ -3,7 +3,6 @@ const PLATFORM = 'Jellyfin';
 
 source.enable = function(conf) {
   config = conf;
-  console.log(authHeaders());
   return config;
 }
 
@@ -12,16 +11,16 @@ source.searchSuggestions = function() {
 }
 
 source.getHome = function(continuationToken) {
-  const resp = jsonRequest(toUrl("/Shows/NextUp?fields=DateCreated"), "Could not fetch latest updates");
-  
+  const resp = simpleJsonGet(toUrl("/Shows/NextUp?fields=DateCreated"), "Could not fetch latest updates");
+
   const videos = resp.body.Items.map(function(item) {
     return new PlatformVideo({
       id: new PlatformID(PLATFORM, item.Id, config.id),
       name: item.Name,
-      thumbnails: new Thumbnails([new Thumbnail(toUrl(`/Items/${item.Id}/Images/Primary?fillWidth=480&quality=90`))]),
+      thumbnails: itemThumbnails(item.Id),
       uploadDate: new Date(item.DateCreated).getTime() / 1000,
       url: `${config.constants.host}/Items/${item.Id}?type=Video`,
-      duration: Math.round(item.RunTimeTicks / 10_000_000),
+      duration: toDuration(item.RunTimeTicks),
       isLive: false,
       author: new PlatformAuthorLink(new PlatformID(PLATFORM, item.SeriesId, config.id),
         item.SeriesName,
@@ -32,7 +31,7 @@ source.getHome = function(continuationToken) {
   });
   const hasMore = false;
   const context = {};
-  
+
   return new VideoPager(videos, hasMore, context);
 }
 
@@ -45,48 +44,82 @@ source.getContentDetails = function(url) {
   const tokens = parsed.pathname.split('/');
   const itemId = tokens[tokens.length - 1];
 
-  // TODO: Apply batching
+  const playbackDetails = {
+    "DeviceProfile": {
+      "DirectPlayProfiles": [
+        { "Container": "mkv", "VideoCodec": "h264", "Type": "Video" },
+        { "Container": "mp4", "VideoCodec": "h264", "Type": "Video" },
+        { "Container": "webm", "Type": "Audio" },
+        { "Container": "mp3", "Type": "Audio" }
+      ],
+      "TranscodingProfiles": [
+        { "Container": "mp4", "Type": "Video", "VideoCodec": "h264", "AudioCodec": "aac", "Protocol": "hls" },
+        { "Container": "mp3", "Type": "Audio", "AudioCodec": "aac", "Protocol": "hls" }
+      ]
+    }
+  }
 
-  const details = jsonRequest(toUrl(`/Items/${itemId}?fields=DateCreated`)).body;
-  const mediaSources = jsonRequest(toUrl(`/Items/${itemId}/PlaybackInfo`)).body;
+  const [details, mediaSources] = batchedJSONRequests([
+    { url: toUrl(`/Items/${itemId}?fields=DateCreated`) },
+    { url: toUrl(`/Items/${itemId}/PlaybackInfo`), body: JSON.stringify(playbackDetails) }
+  ])
 
-  switch (details.Type) {
+  switch (details.body.Type) {
     case "Episode":
-      return videoContent(details, mediaSources, itemId);
+    case "Movie":
+      return videoContent(details.body, mediaSources.body, itemId);
 
     case "Audio":
-      return audioContent(details, mediaSources, itemId);
+      return audioContent(details.body, mediaSources.body, itemId);
   }
 }
 
-function extractSources(mediaSource, itemId) {
+function extractSources(details, mediaSource, itemId) {
   let sources = [];
   let subtitles = [];
+  const hls = mediaSource.TranscodingUrl != null;
+
+  // Use hls streams if media cannot be directly played
+  if (hls) {
+    sources.push(new HLSSource({
+      url: toUrl(mediaSource.TranscodingUrl),
+      duration: toDuration(mediaSource.RunTimeTicks),
+      priority: true,
+      requestModifier: {
+        headers: Object.assign(mediaSource.RequiredHttpHeaders, authHeaders())
+      }
+    }))
+  } else {
+    // Add each source individually if not possible
+    for (const mediaStream of mediaSource.MediaStreams) {
+      if (mediaStream.Type == "Video") {
+        sources.push(new VideoUrlSource({
+          codec: mediaStream.codec,
+          name: mediaStream.DisplayTitle,
+          width: mediaStream.Width,
+          height: mediaStream.Height,
+          duration: toDuration(mediaSource.RunTimeTicks),
+          container: `video/${mediaSource.Container}`,
+          url: toUrl(`/Videos/${itemId}/stream`)
+        }));
+      }
+
+      if (mediaStream.Type == "Audio") {
+        sources.push(new AudioUrlSource({
+          name: mediaStream.Type,
+          bitrate: mediaStream.Bitrate,
+          container: mediaStream.Container,
+          duration: toDuration(mediaSource.RunTimeTicks),
+          url: toUrl(`/Audio/${itemId}/stream`)
+        }));
+      }
+    }
+  }
 
   for (const mediaStream of mediaSource.MediaStreams) {
-    if (mediaStream.Type == "Video") {
-      sources.push(new VideoUrlSource({
-        codec: mediaStream.codec,
-        name: mediaStream.DisplayTitle,
-        width: mediaStream.Width,
-        height: mediaStream.Height,
-        duration: Math.round(mediaSource.RunTimeTicks / 10_000_000),
-        container: `video/${mediaSource.container}`,
-      }));
-    }
-
-    if (mediaStream.Type == "Audio") {
-      sources.push(new AudioUrlSource({
-        name: mediaStream.Type,
-        bitrate: mediaStream.Bitrate,
-        container: mediaStream.Container,
-        duration: Math.round(mediaSource.RunTimeTicks / 10_000_000),
-        url: toUrl(`/Audio/${itemId}/stream`)
-      }));
-    }
-
     if (mediaStream.Type == "Subtitle") {
-      const url =  toUrl(`/Videos/${details.Id}/${mediaSource.Id}/Subtitles/${mediaStream.Index}/0/Stream.vtt`);
+      const url = toUrl(`/Videos/${details.Id}/${mediaSource.Id}/Subtitles/${mediaStream.Index}/0/Stream.vtt`);
+
       subtitles.push({
         name: mediaStream.DisplayTitle,
         url: url,
@@ -104,12 +137,12 @@ function extractSources(mediaSource, itemId) {
       })
     }
   }
-  
+
   return { sources, subtitles }
 }
 
 function audioContent(details, mediaSources, itemId) {
-  let {sources, subtitles} = extractSources(mediaSources.MediaSources[0], itemId)
+  let { sources, _subtitles } = extractSources(details, mediaSources.MediaSources[0], itemId)
 
   return new PlatformVideoDetails({
     id: new PlatformID(PLATFORM, details.Id, config.id),
@@ -119,19 +152,19 @@ function audioContent(details, mediaSources, itemId) {
       toUrl(`/Items/${details.AlbumId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`)
     ),
     name: details.Name,
-    thumbnails: new Thumbnails([new Thumbnail(toUrl(`/Items/${details.Id}/Images/Primary?fillWidth=480&quality=90`))]),
+    thumbnails: itemThumbnails(details.AlbumId),
     dateTime: new Date(details.PremiereDate || details.DateCreated).getTime() / 1000,
-    duration: Math.round(details.RunTimeTicks / 10_000_000),
+    duration: toDuration(details.RunTimeTicks),
     viewCount: null,
     isLive: false,
     description: null,
-    subtitles: subtitles,
-    video: new UnMuxVideoSourceDescriptor([], sources)
+    video: new VideoSourceDescriptor(sources),
+    url: toUrl(`/Items/${details.Id}?type=Audio`)
   })
 }
 
 function videoContent(details, mediaSources, itemId) {
-  let {sources, subtitles} = extractSources(mediaSources.MediaSources[0], itemId)
+  let { sources, subtitles } = extractSources(details, mediaSources.MediaSources[0], itemId)
 
   return new PlatformVideoDetails({
     id: new PlatformID(PLATFORM, details.Id, config.id),
@@ -141,14 +174,15 @@ function videoContent(details, mediaSources, itemId) {
       toUrl(`/Items/${details.SeriesId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`)
     ),
     name: details.Name,
-    thumbnails: new Thumbnails([new Thumbnail(toUrl(`/Items/${details.Id}/Images/Primary?fillWidth=480&quality=90`))]),
+    thumbnails: itemThumbnails(details.Id),
     dateTime: new Date(details.DateCreated).getTime() / 1000,
-    duration: Math.round(details.RunTimeTicks / 10_000_000),
+    duration: toDuration(details.RunTimeTicks),
     viewCount: null,
     isLive: false,
     description: null,
     subtitles: subtitles,
-    video: new VideoSourceDescriptor(sources)
+    video: new VideoSourceDescriptor(sources),
+    url: toUrl(`/Items/${details.Id}?type=Video`)
   });
 }
 
@@ -157,12 +191,10 @@ source.isChannelUrl = function(url) {
 }
 
 source.getChannel = function(url) {
-  const req = jsonRequest(url);
+  const req = simpleJsonGet(url);
   const resp = req.body;
   let parsed = new URL(url);
   parsed.searchParams.set('type', resp.Type);
-
-  console.log(req)
 
   switch (resp.Type) {
     case "Series":
@@ -177,7 +209,7 @@ source.getChannel = function(url) {
       });
     case "MusicAlbum":
       let externalUrls = new Map();
-      resp.ExternalUrls.forEach((entry) =>  map_push_duplicate(externalUrls, entry.Name, entry.Url));
+      resp.ExternalUrls.forEach((entry) => map_push_duplicate(externalUrls, entry.Name, entry.Url));
 
       return new PlatformChannel({
         id: new PlatformID(PLATFORM, resp.Id, config.id),
@@ -195,20 +227,20 @@ source.getChannel = function(url) {
 
 source.searchSuggestions = function(searchTerm) {
   try {
-    const resp = jsonRequest(toUrl(`/Search/Hints?searchTerm=${searchTerm}`));
+    const resp = simpleJsonGet(toUrl(`/Search/Hints?searchTerm=${searchTerm}`));
 
     return resp.body.SearchHints.map((item) => item.Name).filter(onlyUnique);
-  } catch(e) {
+  } catch (e) {
     console.error(e)
     return [];
   }
 }
 
 source.getSearchCapabilities = function() {
-	return {
-		types: [Type.Feed.Mixed, Type.Feed.Streams, Type.Feed.Videos],
-		sorts: []
-	};
+  return {
+    types: [Type.Feed.Mixed, Type.Feed.Streams, Type.Feed.Videos],
+    sorts: []
+  };
 };
 
 source.search = function(query, type, order, filters, channelId) {
@@ -231,7 +263,7 @@ source.search = function(query, type, order, filters, channelId) {
     // TODO
   }
 
-  const resp = jsonRequest(url.toString());
+  const resp = simpleJsonGet(url.toString());
 
   const entries = resp
     .body
@@ -241,13 +273,14 @@ source.search = function(query, type, order, filters, channelId) {
       let data = {};
       switch (item.Type) {
         case "Episode":
+        case "Movie":
           data = {
             id: new PlatformID(PLATFORM, item.Id, config.id),
             name: item.Name,
             thumbnails: new Thumbnails([new Thumbnail(toUrl(`/Items/${item.Id}/Images/Primary?fillWidth=480&quality=90`))]),
             // uploadDate: new Date(item.DateCreated).getTime() / 1000,
             url: `${config.constants.host}/Items/${item.Id}?type=Video`,
-            duration: Math.round(item.RunTimeTicks / 10_000_000),
+            duration: toDuration(item.RunTimeTicks),
             isLive: false,
             author: new PlatformAuthorLink(new PlatformID(PLATFORM, item.SeriesId, config.id),
               item.SeriesName,
@@ -264,7 +297,7 @@ source.search = function(query, type, order, filters, channelId) {
             thumbnails: new Thumbnails([new Thumbnail(toUrl(`/Items/${item.Id}/Images/Primary?fillWidth=480&quality=90`))]),
             // uploadDate: new Date(item.DateCreated).getTime() / 1000,
             url: `${config.constants.host}/Items/${item.Id}?type=Audio`,
-            duration: Math.round(item.RunTimeTicks / 10_000_000),
+            duration: toDuration(item.RunTimeTicks),
             isLive: false,
             author: new PlatformAuthorLink(new PlatformID(PLATFORM, item.AlbumId, config.id),
               item.Album,
@@ -283,6 +316,15 @@ source.search = function(query, type, order, filters, channelId) {
   return new VideoPager(entries, hasMore, context);
 }
 
+// Jellyfin does not have comments AFAIK
+source.getComments = function(url) {
+  return new CommentPager([], false, {});
+}
+
+source.getSubComments = function(comment) {
+  return new CommentPager([], false, {});
+}
+
 // HELPERS
 function authHeaders() {
   return {
@@ -294,15 +336,69 @@ function toUrl(path) {
   return `${config.constants.host}${path}`;
 }
 
-function jsonRequest(url, error) {
+function simpleJsonGet(url, error) {
+  const resp = simpleGet(url, error);
+  resp.body = JSON.parse(resp.body);
+  return resp;
+}
+
+function simpleGet(url, error) {
   const resp = http.GET(url, authHeaders(), false);
 
   if (!resp.isOk) {
     throw new ScriptException(error || "Failed to request data from Jellyfin");
-  };
+  }
 
-  resp.body = JSON.parse(resp.body);
   return resp;
+}
+
+function batchedJSONRequests(requests, error) {
+  // Inject content-type into all headers
+  for (const request of requests) {
+    request.headers = Object.assign({ 'content-type': "application/json" }, request.headers || {});
+  }
+  const responses = batchedRequests(requests, error);
+
+  for (const response of responses) {
+    response.body = JSON.parse(response.body);
+  }
+
+  return responses;
+}
+
+function batchedRequests(requests, error) {
+  let client = http.batch();
+
+  for (const request of requests) {
+    const headers = Object.assign(authHeaders(), request.headers || {});
+
+    if (request.body != null) {
+      client.requestWithBody(
+        request.method || "POST",
+        request.url,
+        request.body,
+        headers,
+        false
+      );
+    } else {
+      client.request(
+        request.method || "GET",
+        request.url,
+        headers,
+        false
+      );
+    }
+  }
+
+  const responses = client.execute();
+
+  for (const response of responses) {
+    if (!response.isOk) {
+      throw new ScriptException(error || "Failed to request data from Jellyfin");
+    }
+  }
+
+  return responses;
 }
 
 function isType(url, types) {
@@ -313,14 +409,14 @@ function isType(url, types) {
     if (type == null) {
       const tokens = url.split('/');
       const itemId = tokens[tokens.length - 1];
-      let resp = jsonRequest(toUrl(`/Items/${itemId}`), "Could not fetch details");
+      let resp = simpleJsonGet(toUrl(`/Items/${itemId}`), "Could not fetch details");
 
       return types.includes(resp.body.Type);
     } else {
       return types.includes(parsed.searchParams.get("type"));
     }
   } else {
-    return false;    
+    return false;
   }
 }
 
@@ -343,3 +439,33 @@ function map_push_duplicate(map, key, value, index) {
     map.set(insertKey, value);
   }
 }
+
+function toDuration(runTimeTicks) {
+  return Math.round(runTimeTicks / 10_000_000)
+}
+
+function itemThumbnails(itemId) {
+  let url = new URL(toUrl(`/Items/${itemId}/Images/Primary`));
+  url.searchParams.set('quality', '50');
+
+  url.searchParams.set('fillWidth', '240');
+  let url1 = url.toString();
+
+  url.searchParams.set('fillWidth', '480');
+  let url2 = url.toString();
+
+  url.searchParams.set('quality', '50');
+  url.searchParams.set('fillWidth', '720');
+  let url3 = url.toString();
+
+  url.searchParams.set('fillWidth', '1080');
+  let url4 = url.toString();
+
+  return new Thumbnails([
+    new Thumbnail(url1, 240),
+    new Thumbnail(url2, 480),
+    new Thumbnail(url3, 720),
+    new Thumbnail(url4, 1080)
+  ])
+}
+
