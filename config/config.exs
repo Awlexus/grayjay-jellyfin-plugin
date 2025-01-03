@@ -8,7 +8,8 @@
 import Config
 
 config :grayjay_jellyfin_plugin,
-  generators: [timestamp_type: :utc_datetime]
+  generators: [timestamp_type: :utc_datetime],
+  generate_key: false
 
 # Configures the endpoint
 config :grayjay_jellyfin_plugin, GrayjayJellyfinPluginWeb.Endpoint,

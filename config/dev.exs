@@ -54,7 +54,7 @@ config :grayjay_jellyfin_plugin, GrayjayJellyfinPluginWeb.Endpoint,
   ]
 
 # Enable dev routes for dashboard and mailbox
-config :grayjay_jellyfin_plugin, dev_routes: true
+config :grayjay_jellyfin_plugin, dev_routes: true, generate_key: true
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :console, format: "[$level] $message\n"
