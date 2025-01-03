@@ -15,17 +15,16 @@ and start watching your content.
 
 * [x] Authorization
 * [x] Get latest media in Home
-* [ ] Search function
+* [x] Search function
   * [ ] Shows (Channel)
-  * [ ] Episodes (Video)
-  * [ ] Movies (Video)
-  * [ ] Song artists (Channel)
+  * [x] Episodes (Video)
+  * [x] Movies (Video)
+  * [x] Song artists (Channel)
   * [ ] Staff/Actors (Channel)
   * [ ] Albums (Playlist)
 * [ ] Media Playback 
   * [x] Audio playback
-  * [ ] Video playback - Not quite there yet
-    * [ ] Some videos play audio, but no video
+  * [x] Video playback - Not quite there yet
     * [ ] Duration is not properly shown in player
   * [x] Subttile playback
 * [ ] Creators
