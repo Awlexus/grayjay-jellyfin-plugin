@@ -21,14 +21,7 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
   end
 
   def home(conn, _params) do
-    url =
-      URI.encode(
-        "http://192.168.1.11:4000/plugin_config/http%3A%2F%2F192.168.1.8%3A8096?version=0.1.0&token=8b55ac0c208d41e3b17bc98bca8ba2ce&client=Grayjay+client&device_name=Test+Device&device_id=019403eb-362f-7760-ba35-2f30f9cf368c"
-      )
-
-    host = "http://192.168.1.8:8096"
-    render(conn, :home, host: host, url: url, layout: false)
-    # render(conn, :home, host: nil, url: nil, layout: false)
+    render(conn, :home, host: nil, url: nil, layout: false)
   end
 
   def config(conn, %{"host" => _host, "token" => _token} = params) do

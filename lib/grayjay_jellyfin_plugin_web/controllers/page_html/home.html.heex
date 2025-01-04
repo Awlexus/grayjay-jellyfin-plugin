@@ -15,7 +15,7 @@
         <.button>Generate QR code</.button>
       </.form>
 
-      <.button class="my-2 w-full" onclick="copyContent(this)" data-content={@url}>Copy Url</.button>
+      <.button :if={@url} class="my-2 w-full" onclick="copyContent(this)" data-content={@url}>Copy Url</.button>
 
     </div>
     <div :if={@url} class="bg-white rounded mx-auto hidden sm:block">
