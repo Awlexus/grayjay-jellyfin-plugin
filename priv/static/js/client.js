@@ -6,6 +6,8 @@ source.enable = function(conf) {
   return config;
 }
 
+source.disable = function() { }
+
 source.searchSuggestions = function() {
   return [];
 }
@@ -22,11 +24,7 @@ source.getHome = function(continuationToken) {
       url: `${config.constants.host}/Items/${item.Id}?type=Video`,
       duration: toDuration(item.RunTimeTicks),
       isLive: false,
-      author: new PlatformAuthorLink(new PlatformID(PLATFORM, item.SeriesId, config.id),
-        item.SeriesName,
-        toUrl(`/Items/${item.SeriesId}?type=Series`),
-        toUrl(`/Items/${item.SeriesId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`)
-      )
+      author: extractItemAuthor(item)
     });
   });
   const hasMore = false;
@@ -146,11 +144,7 @@ function audioContent(details, mediaSources, itemId) {
 
   return new PlatformVideoDetails({
     id: new PlatformID(PLATFORM, details.Id, config.id),
-    author: new PlatformAuthorLink(new PlatformID(PLATFORM, details.AlbumId, config.id),
-      details.Album,
-      toUrl(`/Items/${details.AlbumId}?type=MusicAlbum`),
-      toUrl(`/Items/${details.AlbumId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`)
-    ),
+    author: extractItemAuthor(details),
     name: details.Name,
     thumbnails: itemThumbnails(details.AlbumId),
     dateTime: new Date(details.PremiereDate || details.DateCreated).getTime() / 1000,
@@ -168,11 +162,7 @@ function videoContent(details, mediaSources, itemId) {
 
   return new PlatformVideoDetails({
     id: new PlatformID(PLATFORM, details.Id, config.id),
-    author: new PlatformAuthorLink(new PlatformID(PLATFORM, details.SeriesId, config.id),
-      details.SeriesName,
-      toUrl(`/Items/${details.SeriesId}?type=Series`),
-      toUrl(`/Items/${details.SeriesId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`)
-    ),
+    author: extractItemAuthor(details),
     name: details.Name,
     thumbnails: itemThumbnails(details.Id),
     dateTime: new Date(details.DateCreated).getTime() / 1000,
@@ -277,26 +267,21 @@ source.search = function(query, type, order, filters, channelId) {
           data = {
             id: new PlatformID(PLATFORM, item.Id, config.id),
             name: item.Name,
-            thumbnails: new Thumbnails([new Thumbnail(toUrl(`/Items/${item.Id}/Images/Primary?fillWidth=480&quality=90`))]),
+            thumbnails: itemThumbnails(item.Id),
             // uploadDate: new Date(item.DateCreated).getTime() / 1000,
-            url: `${config.constants.host}/Items/${item.Id}?type=Video`,
+            url: toUrl(`/Items/${item.Id}?type=Video`),
             duration: toDuration(item.RunTimeTicks),
             isLive: false,
-            author: new PlatformAuthorLink(new PlatformID(PLATFORM, item.SeriesId, config.id),
-              item.SeriesName,
-              toUrl(`/Items/${item.Id}?type=Series`),
-              toUrl(`/Items/${item.SeriesId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`)
-            )
-          };
-          break;
+            author: extractItemAuthor(item)
+          });
 
         case "Audio":
           data = {
             id: new PlatformID(PLATFORM, item.Id, config.id),
             name: item.Name,
-            thumbnails: new Thumbnails([new Thumbnail(toUrl(`/Items/${item.Id}/Images/Primary?fillWidth=480&quality=90`))]),
+            thumbnails: itemThumbnails(item.Id),
             // uploadDate: new Date(item.DateCreated).getTime() / 1000,
-            url: `${config.constants.host}/Items/${item.Id}?type=Audio`,
+            url: toUrl(`/Items/${item.Id}?type=Audio`),
             duration: toDuration(item.RunTimeTicks),
             isLive: false,
             author: new PlatformAuthorLink(new PlatformID(PLATFORM, item.AlbumId, config.id),
@@ -333,7 +318,7 @@ function authHeaders() {
 }
 
 function toUrl(path) {
-  return `${config.constants.host}${path}`;
+  return `${config.constants.uri}${path}`;
 }
 
 function simpleJsonGet(url, error) {
@@ -442,6 +427,27 @@ function map_push_duplicate(map, key, value, index) {
 
 function toDuration(runTimeTicks) {
   return Math.round(runTimeTicks / 10_000_000)
+}
+
+function extractItemAuthor(item) {
+  switch (item.Type) {
+    case "Episode":
+      return author({itemId: item.SeriesId, name: item.SeriesName, type: "Series"});
+
+    case "Audio":
+      if (item.AlbumId) 
+        return author({ itemId: item.AlbumId, name: item.Album, type: "Album"});
+  }
+  return null;
+}
+
+function author({ name, itemId, type }) {
+  return PlatformAuthorLink(
+    new PlatformID(PLATFORM, itemId, config.id),
+    name,
+    toUrl(`/Items/${itemId}?type=${type}`),
+    toUrl(`/Items/${itemId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`)
+  );
 }
 
 function itemThumbnails(itemId) {
