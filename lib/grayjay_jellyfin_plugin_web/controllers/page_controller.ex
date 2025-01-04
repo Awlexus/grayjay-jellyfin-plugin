@@ -10,7 +10,7 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
 
     case login(host, username, password, Map.get(params, "device_name", "Grayjay client")) do
       {:ok, keys} ->
-        url = "grayjay://plugin/" <> url(~p"/plugin_config/#{host}?#{keys}")
+        url = url(~p"/plugin_config/#{host}?#{keys}")
         render(conn, :home, host: host, url: url, layout: false)
 
       :error ->
