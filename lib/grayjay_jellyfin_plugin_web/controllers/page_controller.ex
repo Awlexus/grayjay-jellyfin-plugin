@@ -24,15 +24,16 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
     render(conn, :home, host: nil, url: nil, layout: false)
   end
 
-  def config(conn, %{"host" => _host, "token" => _token} = params) do
-    {host, query_params} = Map.pop(params, "host")
+  def config(conn, %{"uri" => _uri, "token" => _token} = params) do
+    {uri, query_params} = Map.pop(params, "uri")
+    host = URI.new!(uri).host
 
     json(conn, %{
       name: "Plugin for Jellyfin",
       description: "An unofficial source for your own Jellyfin server",
       author: "awlexus",
       authorUrl: "https://github.com/awlexus",
-      sourceUrl: url(~p"/plugin_config/#{host}?#{query_params}"),
+      sourceUrl: url(~p"/plugin_config/#{uri}?#{query_params}"),
       scriptUrl: static_url(conn, "/js/client.js"),
       scriptSignature: Signature.get_signature(),
       scriptPublicKey: Signature.get_public_key(),
@@ -41,7 +42,7 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
       id: "1d00dfbf-aa8d-4e3a-8d52-d63e5999fe09",
       packages: ["Http"],
       allowEval: false,
-      allowUrls: ["everywhere"],
+      allowUrls: [host],
       constants: params
     })
   end
