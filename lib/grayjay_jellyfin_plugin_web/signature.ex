@@ -57,12 +57,20 @@ defmodule GrayjayJellyfinPluginWeb.Signature do
         {public_key, signature}
     end
 
+  if not :public_key.verify(script, :sha512, signature, public_key) do
+    raise "Could not verify script signature"
+  end
+
   encoded_public_key =
-    :RSAPublicKey
+    :SubjectPublicKeyInfo
     |> :public_key.pem_entry_encode(public_key)
     |> List.wrap()
     |> :public_key.pem_encode()
+    |> String.split()
+    |> Enum.drop(3)
+    |> Enum.drop(-3)
+    |> Enum.join()
 
   def get_public_key(), do: unquote(encoded_public_key)
-  def get_signature(), do: unquote(Base.encode64(signature))
+  def get_signature(), do: unquote(Base.encode64(signature, padding: false))
 end
