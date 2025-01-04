@@ -18,11 +18,38 @@
 // Include phoenix_html to handle method=PUT/DELETE in forms and buttons.
 import "phoenix_html"
 
-function copyContent(element) {
-  navigator.clipboard.writeText(element.dataset.content);
+function fallbackCopyTextToClipboard(text) {
+  var textArea = document.createElement("textarea");
+  textArea.value = text;
+
+  // Avoid scrolling to bottom
+  textArea.style.top = "0";
+  textArea.style.left = "0";
+  textArea.style.position = "fixed";
+
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+
+  try {
+    var successful = document.execCommand('copy');
+    var msg = successful ? 'successful' : 'unsuccessful';
+    console.log('Fallback: Copying text command was ' + msg);
+  } catch (err) {
+    console.error('Fallback: Oops, unable to copy', err);
+  }
+
+  document.body.removeChild(textArea);
 }
 
-window.copyContent = copyContent;
+window.copyContent = function(element) {
+  if (!navigator.clipboard) {
+    fallbackCopyTextToClipboard(element.dataset.content);
+    return;
+  } else {
+    navigator.clipboard.writeText(element.dataset.content);
+  }
+}
 
 // Establish Phoenix Socket and LiveView configuration.
 // import {Socket} from "phoenix"
