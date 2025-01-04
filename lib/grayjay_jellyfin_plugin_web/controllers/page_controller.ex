@@ -10,19 +10,25 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
 
     case login(host, username, password, Map.get(params, "device_name", "Grayjay client")) do
       {:ok, keys} ->
-        url = url(~p"/plugin_config/#{host}?#{keys}")
-
-        render(conn, :home, host: host, url: url, qr_code: qr_code(url, :svg), layout: false)
+        url = "grayjay://plugin/" <> url(~p"/plugin_config/#{host}?#{keys}")
+        render(conn, :home, host: host, url: url, layout: false)
 
       :error ->
         conn
         |> put_flash(:error, "Invalid credentials")
-        |> render(:home, qr_code: nil, host: host, url: nil, layout: false)
+        |> render(:home, host: host, url: nil, layout: false)
     end
   end
 
   def home(conn, _params) do
-    render(conn, :home, qr_code: nil, host: nil, url: nil, layout: false)
+    url =
+      URI.encode(
+        "http://192.168.1.11:4000/plugin_config/http%3A%2F%2F192.168.1.8%3A8096?version=0.1.0&token=8b55ac0c208d41e3b17bc98bca8ba2ce&client=Grayjay+client&device_name=Test+Device&device_id=019403eb-362f-7760-ba35-2f30f9cf368c"
+      )
+
+    host = "http://192.168.1.8:8096"
+    render(conn, :home, host: host, url: url, layout: false)
+    # render(conn, :home, host: nil, url: nil, layout: false)
   end
 
   def config(conn, %{"host" => _host, "token" => _token} = params) do
@@ -73,25 +79,17 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
     end
   end
 
-  def qr_test(conn, _) do
-    "/qr_test/" <> url = conn.request_path
-    url = "#{url}?#{conn.query_string}"
-    dbg(url)
+  def qr_code(conn, %{"url" => url}) do
+    {:ok, qr_code} =
+      "grayjay://plugin/#{url}"
+      |> QRCode.create()
+      |> QRCode.render(:png)
 
-    send_download(conn, {:binary, qr_code(url, :png)},
+    send_download(conn, {:binary, qr_code},
       filename: "qr_code.png",
       content_type: "image/png",
       disposition: :inline
     )
-  end
-
-  defp qr_code(url, type) do
-    {:ok, qr_code} =
-      "grayjay://plugin/#{url}"
-      |> QRCode.create()
-      |> QRCode.render(type)
-
-    qr_code
   end
 
   defp prepare_host(url) do

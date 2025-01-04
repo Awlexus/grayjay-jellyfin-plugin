@@ -1,8 +1,6 @@
 defmodule GrayjayJellyfinPluginWeb.Router do
   use GrayjayJellyfinPluginWeb, :router
 
-  @mix_env Mix.env()
-
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -21,11 +19,8 @@ defmodule GrayjayJellyfinPluginWeb.Router do
 
     get "/", PageController, :home
     post "/", PageController, :home
+    get "/qr_code/*url", PageController, :qr_code
     get "/plugin_config/:host", PageController, :config
-
-    if @mix_env == :dev do
-      get "/qr_test/*url", PageController, :qr_test
-    end
   end
 
   # Other scopes may use custom stacks.
