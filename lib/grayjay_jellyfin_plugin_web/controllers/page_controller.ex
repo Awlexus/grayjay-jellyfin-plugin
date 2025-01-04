@@ -12,12 +12,7 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
       {:ok, keys} ->
         url = url(~p"/plugin_config/#{host}?#{keys}")
 
-        {:ok, qr_code} =
-          url
-          |> QRCode.create()
-          |> QRCode.render(:svg)
-
-        render(conn, :home, host: host, url: url, qr_code: qr_code, layout: false)
+        render(conn, :home, host: host, url: url, qr_code: qr_code(url, :svg), layout: false)
 
       :error ->
         conn
@@ -76,6 +71,27 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
       _ ->
         :error
     end
+  end
+
+  def qr_test(conn, _) do
+    "/qr_test/" <> url = conn.request_path
+    url = "#{url}?#{conn.query_string}"
+    dbg(url)
+
+    send_download(conn, {:binary, qr_code(url, :png)},
+      filename: "qr_code.png",
+      content_type: "image/png",
+      disposition: :inline
+    )
+  end
+
+  defp qr_code(url, type) do
+    {:ok, qr_code} =
+      "grayjay://plugin/#{url}"
+      |> QRCode.create()
+      |> QRCode.render(type)
+
+    qr_code
   end
 
   defp prepare_host(url) do
