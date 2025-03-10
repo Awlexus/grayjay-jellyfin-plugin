@@ -2,27 +2,36 @@ let config = {};
 const PLATFORM = "Jellyfin";
 
 class JellyfinContentPager extends ContentPager {
-  constructor({ url, type }) {
-    let entries = simpleJsonGet(url, "Could not fetch playlist details").body
-      .Items;
+  constructor({ url, type, limit = 20, errorMessage = "Could not fetch items" }) {
+    let baseUrl = new URL(url);
+    baseUrl.searchParams.set('limit', limit);
 
-    if (type === "MusicAlbum") {
-      entries.sort((a, b) => a.IndexNumber - b.IndexNumber);
-      entries = entries.map((item) => parseItem(item, "Artist"));
-    } else {
-      entries = entries.map(parseItem);
+    // Fix sorting for music albums
+    if (type == "MusicAlbum") {
+      baseUrl.searchParams.set('sortBy', 'IndexNumber');
     }
 
-    super(entries, false);
-    this.url = url;
-  }
+    let body = simpleJsonGet(baseUrl.toString(), errorMessage).body;
+    let entries = body.Items.map(parseItem);
 
-  hasMorePagers() {
-    return false;
+    const totalItemCount = body.TotalRecordCount;
+    super(entries, entries.length < totalItemCount);
+
+    this.url = baseUrl;
+    this.limit = limit;
+    this.errorMessage = errorMessage;
+    this.totalItemCount = totalItemCount;
+    this.currentIndex = 0;
   }
 
   nextPage() {
-    return null;
+    this.currentIndex += this.limit;
+    this.url.searchParams.set('startIndex', this.currentIndex);
+
+    this.results = simpleJsonGet(this.url.toString(), this.errorMessage).body.Items.map(parseItem);
+    this.hasMore = this.currentIndex + this.results.length < this.totalItemCount;
+
+    return this;
   }
 }
 
@@ -38,27 +47,10 @@ source.searchSuggestions = function () {
 };
 
 source.getHome = function (continuationToken) {
-  const resp = simpleJsonGet(
-    toUrl("/Shows/NextUp?fields=DateCreated"),
-    "Could not fetch latest updates",
-  );
-
-  const videos = resp.body.Items.map(function (item) {
-    return new PlatformVideo({
-      id: new PlatformID(PLATFORM, item.Id, config.id),
-      name: item.Name,
-      thumbnails: itemThumbnails(item.Id),
-      uploadDate: new Date(item.DateCreated).getTime() / 1000,
-      url: toUrl(`/Items/${item.Id}?type=Video`),
-      duration: toDuration(item.RunTimeTicks),
-      isLive: false,
-      author: extractItemAuthor(item, "Video"),
-    });
+  return new JellyfinContentPager({
+    url: toUrl("/Shows/NextUp?fields=DateCreated"),
+    errorMessage: "Could not fetch latest updates",
   });
-  const hasMore = false;
-  const context = {};
-
-  return new VideoPager(videos, hasMore, context);
 };
 
 source.isContentDetailsUrl = function (url) {
