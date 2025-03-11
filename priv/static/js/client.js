@@ -3,7 +3,14 @@ const PLATFORM = "Jellyfin";
 
 class JellyfinContentPager extends ContentPager {
   constructor({ url, type, limit = 20, errorMessage = "Could not fetch items" }) {
-    let baseUrl = new URL(url);
+    let baseUrl;
+
+    if (url instanceof URL) {
+      baseUrl = url;
+    } else {
+      baseUrl = new URL(url);
+    }
+
     baseUrl.searchParams.set('limit', limit);
 
     // Fix sorting for music albums
@@ -32,6 +39,18 @@ class JellyfinContentPager extends ContentPager {
     this.hasMore = this.currentIndex + this.results.length < this.totalItemCount;
 
     return this;
+  }
+}
+
+class JellyfinSearchContentPager extends ContentPager {
+  // TODO: Do something with these filter options
+  constructor({ url = toUrl('/Search/Hints'), query, type, order, filters, channelId, jellyfinTypes, errorMessage = "Search failed" }) {
+    let searchUrl = new URL(url);
+    searchUrl.searchParams.append("SearchTerm", query);
+    searchUrl.searchParams.append("includeItemTypes", jellyfinTypes.join(","));
+
+    let entries = simpleJsonGet(searchUrl.toString(), errorMessage).body.SearchHints.map(parseItem);
+    super(entries, false);
   }
 }
 
@@ -235,59 +254,20 @@ source.getChannel = function (url) {
   let parsed = new URL(url);
   parsed.searchParams.set("type", resp.Type);
 
-  switch (resp.Type) {
-    case "Series":
-      return new PlatformChannel({
-        id: new PlatformID(PLATFORM, resp.Id, config.id),
-        name: resp.Name,
-        thumbnail: toUrl(
-          `/Items/${resp.SeriesId}/Images/Primary?fillWidth=256&fillHeight=256&quality=90`,
-        ),
-        banner: toUrl(
-          `/Items/${resp.SeriesId}/Images/BackDrop/0?fillWidth=256&fillHeight=256&quality=90`,
-        ),
-        subscribers: null,
-        description: resp.Overview,
-        url: parsed.toString(),
-      });
-  }
+  return parseItem(resp);
 };
 
 source.getChannelContents = function (url) {
   const itemId = urlId(url);
 
-  const entries = simpleJsonGet(
-    toUrl(`/Items?ParentId=${itemId}`),
-  ).body.Items.map(function (item) {
-    console.log(item);
-    switch (item.Type) {
-      case "Season":
-        return new PlatformPlaylist({
-          id: new PlatformID(PLATFORM, item.Id, config.id),
-          name: item.Name,
-          url: toUrl(`/Items/${item.Id}?type=Playlist`),
-          thumbnail: toUrl(`/Items/${item.Id}/Images/Primary?fillWidth=240`),
-          author: extractItemAuthor(item, "Season"),
-        });
-      case "Episode":
-        return new PlatformVideo({
-          id: new PlatformID(PLATFORM, item.Id, config.id),
-          name: item.Name,
-          thumbnails: itemThumbnails(item.Id),
-          uploadDate: new Date(item.DateCreated).getTime() / 1000,
-          url: toUrl(`/Items/${item.Id}?type=Video`),
-          duration: toDuration(item.RunTimeTicks),
-          isLive: false,
-          author: extractItemAuthor(item, "Episode"),
-        });
-    }
+  return new JellyfinContentPager({
+    url: toUrl(`/Items?ParentId=${itemId}`),
+    errorMessage: "Could not fetch Channel contents",
   });
-
-  return new VideoPager(entries);
 };
 
 source.isPlaylistUrl = function (url) {
-  return isType(url, ["Playlist", "MusicAlbum"]);
+  return isType(url, ["Playlist", "MusicAlbum", "Season"]);
 };
 
 source.getPlaylist = function (url) {
@@ -297,29 +277,25 @@ source.getPlaylist = function (url) {
   const resp = simpleJsonGet(url).body;
   parsed.searchParams.set("type", resp.Type);
 
-  switch (resp.Type) {
-    case "MusicAlbum":
-    case "Season":
-      const contents = new JellyfinContentPager({
-        type: resp.Type,
-        url: toUrl(`/Items?ParentId=${resp.Id}`),
-      });
+  const contents = new JellyfinContentPager({
+    type: resp.Type,
+    url: toUrl(`/Items?ParentId=${resp.Id}`),
+  });
 
-      return new PlatformPlaylistDetails({
-        id: new PlatformID(PLATFORM, resp.Id, config.id),
-        name: resp.Name,
-        thumbnail: toUrl(`/Items/${resp.Id}/Images/Primary?fillWidth=240`),
-        banner: toUrl(
-          `/Items/${resp.SeriesId}/Images/BackDrop/0?fillWidth=256&fillHeight=256&quality=90`,
-        ),
-        subscribers: null,
-        description: resp.Overview,
-        url: parsed.toString(),
-        links: externalUrls,
-        author: extractItemAuthor(resp, resp.Type),
-        contents: contents,
-      });
-  }
+  return new PlatformPlaylistDetails({
+    id: new PlatformID(PLATFORM, resp.Id, config.id),
+    name: resp.Name,
+    thumbnail: toUrl(`/Items/${resp.Id}/Images/Primary?fillWidth=240`),
+    banner: toUrl(
+      `/Items/${resp.SeriesId}/Images/BackDrop/0`,
+    ),
+    subscribers: null,
+    description: resp.Overview,
+    url: parsed.toString(),
+    links: externalUrls,
+    author: extractItemAuthor(resp, resp.Type),
+    contents: contents,
+  });
 };
 
 source.searchSuggestions = function (searchTerm) {
@@ -350,22 +326,10 @@ source.search = function (query, type, order, filters, channelId) {
     "Video",
   ];
 
-  const entries = genericSearch({
-    query,
-    includeItemTypes,
-    order,
-    filters,
-    channelId,
-  });
-  const hasMore = false;
-  const context = {};
-  console.log(entries);
-
-  // TODO: Add support for pagination
-  return new VideoPager(entries, hasMore, context);
+  return new JellyfinSearchContentPager({ query, type, order, filters, channelId, jellyfinTypes: includeItemTypes });
 };
 
-source.searchChannels = function (query, type, order, filters, channelId) {
+source.searchChannels = function (query) {
   const includeItemTypes = [
     "Channel",
     "LiveTvChannel",
@@ -376,44 +340,24 @@ source.searchChannels = function (query, type, order, filters, channelId) {
     "Studio",
   ];
 
-  const entries = genericSearch({
-    query,
-    includeItemTypes,
-    order,
-    filters,
-    channelId,
-  });
-  const hasMore = false;
-  const context = {};
-
-  // TODO: Add support for pagination
-  return new VideoPager(entries, hasMore, context);
+  return new JellyfinSearchContentPager({ query, jellyfinTypes: includeItemTypes });
 };
 
-source.searchChannelContents = function (
-  channelUrl,
-  query,
-  type,
-  order,
-  filters,
-) {
-  return new ParentPaginator(channelUrl, query, type, order, filters);
-};
+
+// source.searchChannelContents = function (
+//   channelUrl,
+//   query,
+//   type,
+//   order,
+//   filters,
+// ) {
+//   return new ParentPaginator(channelUrl, query, type, order, filters);
+// };
 
 source.searchPlaylists = function (query, type, order, filters, channelId) {
-  const includeItemTypes = ["MusicAlbum", "Playlist", "Program", "Season"];
+  const includeItemTypes = ["MusicAlbum", "Playlist", "Program"];
 
-  const entries = genericSearch({
-    query,
-    includeItemTypes,
-    order,
-    filters,
-    channelId,
-  });
-  const hasMore = false;
-
-  // TODO: Add support for pagination
-  return new PlaylistPager(entries, hasMore);
+  return new JellyfinSearchContentPager({query, type, order, filters, channelId, jellyfinTypes: includeItemTypes })
 };
 
 function genericSearch({ query, includeItemTypes, order, filters, channelId }) {
@@ -692,23 +636,37 @@ function parseItem(item) {
         isLive: false,
       });
 
+
     // case "Channel":
     // case "LiveTvChannel":
-    // case "MusicArtist":
+    case "MusicArtist":
     // case "MusicGenre":
-    // case "Person":
-    // case "Series":
-    // case "Studio":
+    case "Person":
+    case "Studio":
+    case "Series":
+      return new PlatformChannel({
+        id: new PlatformID(PLATFORM, item.Id, config.id),
+        name: item.Name,
+        description: item.Overview,
+        thumbnail: toUrl(`/Items/${item.Id}/Images/Primary?fillWidth=240`),
+        banner: toUrl(`/Items/${item.Id}/Images/Backdrop`),
+        url: toUrl(`/Items/${item.Id}?type=${item.Type}`),
+        links: item.ExternalUrls?.reduce((acc, item) => {
+          acc[item.Name] = item.Url;
+          return acc;
+        }, {})
+        
+      });
     // return new
 
-    // case "Playlist":
+    case "Playlist":
+    case "Season":
     case "MusicAlbum":
       // case "Program":
-      // case "Season":
       return new PlatformPlaylist({
         id: new PlatformID(PLATFORM, item.Id, config.id),
         name: item.Name,
-        url: toUrl(`/Items/${item.Id}?type=MusicAlbum`),
+        url: toUrl(`/Items/${item.Id}?type=${item.Type}`),
         thumbnail: toUrl(`/Items/${item.Id}/Images/Primary?fillWidth=240`),
         author: extractItemAuthor(item, item.Type),
       });
