@@ -8,7 +8,13 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
   def home(conn, %{"url" => url, "username" => username, "password" => password} = params) do
     host = prepare_host(url)
 
-    case login(host, username, password, Map.get(params, "device_name", "Grayjay client")) do
+    device_name =
+      case params do
+        %{"device_name" => ""} -> "Grayjay client"
+        %{"device_name" => device_name} -> device_name
+      end
+
+    case login(host, username, password, device_name) do
       {:ok, keys} ->
         url = url(~p"/plugin_config/#{host}?#{keys}")
         render(conn, :home, host: host, url: url, layout: false)
@@ -62,9 +68,9 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
         ~s(MediaBrowser Client="#{header_keys[:client]}", Version="#{header_keys[:version]}", DeviceId="#{header_keys[:device_id]}", Device="#{header_keys[:device_name]}")
     }
 
-    url = "#{host}/Users/AuthenticateByName"
+    url = Path.join(host, "Users/AuthenticateByName")
 
-    case Req.post(url, json: body, headers: headers) do
+    case Req.post(url, json: body, headers: headers) |> dbg() do
       {:ok, %Req.Response{status: 200, body: %{"AccessToken" => access_token}}} ->
         {:ok, Map.put(header_keys, :token, access_token)}
 
@@ -91,7 +97,7 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
 
     uri = %URI{
       uri
-      | path: nil,
+      | path: uri.path,
         query: nil,
         fragment: nil,
         userinfo: nil,
