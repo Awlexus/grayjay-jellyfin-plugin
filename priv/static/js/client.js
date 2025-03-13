@@ -268,26 +268,24 @@ source.getPlaylist = function(url) {
   let externalUrls = new Map();
   let parsed = new URL(url);
 
-  const resp = simpleJsonGet(url).body;
-  parsed.searchParams.set("type", resp.Type);
+  const item = simpleJsonGet(url).body;
+  parsed.searchParams.set("type", item.Type);
 
   const contents = new JellyfinContentPager({
-    type: resp.Type,
-    url: toUrl(`/Items?ParentId=${resp.Id}`),
+    type: item.Type,
+    url: toUrl(`/Items?ParentId=${item.Id}`),
   });
 
   return new PlatformPlaylistDetails({
-    id: new PlatformID(PLATFORM, resp.Id, config.id),
-    name: resp.Name,
-    thumbnail: toUrl(`/Items/${resp.Id}/Images/Primary?fillWidth=240`),
-    banner: toUrl(
-      `/Items/${resp.SeriesId}/Images/BackDrop/0`,
-    ),
+    id: new PlatformID(PLATFORM, item.Id, config.id),
+    name: item.Name,
+    thumbnail: thumbnail({ item, query: { fillWidth: 240 } }),
+    banner: banner({ item }),
     subscribers: null,
-    description: resp.Overview,
+    description: item.Overview,
     url: parsed.toString(),
     links: externalUrls,
-    author: extractItemAuthor(resp, resp.Type),
+    author: extractItemAuthor(item, item.Type),
     contents: contents,
   });
 };
@@ -636,8 +634,8 @@ function parseItem(item) {
         id: new PlatformID(PLATFORM, item.Id, config.id),
         name: item.Name,
         description: item.Overview,
-        thumbnail: thumbnail(item),
-        banner: banner(item),
+        thumbnail: thumbnail({ item }),
+        banner: banner({ item }),
         url: toUrl(`/Items/${item.Id}?type=${item.Type}`),
         links: item.ExternalUrls?.reduce((acc, item) => {
           acc[item.Name] = item.Url;
@@ -655,26 +653,39 @@ function parseItem(item) {
         id: new PlatformID(PLATFORM, item.Id, config.id),
         name: item.Name,
         url: toUrl(`/Items/${item.Id}?type=${item.Type}`),
-        thumbnail: thumbnail(item, { fillWidth: 240 }),
+        thumbnail: banner({ item }),
         author: extractItemAuthor(item, item.Type),
       });
   }
 }
 
-function thumbnail(item, order = ["Primary", "Logo", "Thumb"], query) {
-  let type = order.find((type) => type in item.imageTags);
-  let tag = item.ImageTags[type];
+function thumbnail({ item, order = ["Primary", "Logo", "Thumb"], query }) {
+  let type;
+  let tag;
+
+  if (item.imageTags != null) {
+    type = order.find((type) => type in item.imageTags);
+    tag = item.ImageTags[type];
+  } else {
+    type = order.find((type) => `${type}ImageTag` in item);
+
+    if (type == null) return null;
+
+    tag = item[`${type}ImageTag`];
+  }
 
   let url = toUrl(`/Items/${item.Id}/Images/${type}?tag=${tag}`);
 
   return withQuery(url, query);
 }
 
-function banner(item, query) {
-  if (item.BackdropImaeTags.length > 0) {
-    return withQuery(toUrl(`/Items/${item.Id}/Images/Backdrop`), query);
+function banner({ item, query }) {
+  if (item.BackdropImageTag != null) {
+    return withQuery(toUrl(`/Items/${item.Id}/Images/Backdrop?tag=${item.BackdropImageTag}]`), query);
+  } else if (item.BackgroundImageTags != null && item.BackdropImageTags.length > 0) {
+    return withQuery(toUrl(`/Items/${item.Id}/Images/Backdrop/0?tag=${item.BackdropImageTags[0]}]`), query);
   } else {
-    return thumbnail(item, query);
+    return thumbnail({ item, query });
   }
 }
 
