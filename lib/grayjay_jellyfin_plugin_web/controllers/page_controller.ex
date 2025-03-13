@@ -45,7 +45,7 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
       scriptPublicKey: Signature.get_public_key(),
       iconUrl: static_url(conn, "/images/jellyfin-logo.png"),
       version: @plugin_version,
-      id: "1d00dfbf-aa8d-4e3a-8d52-d63e5999fe09",
+      id: "1d00dfbf-aa8d-4e3a-8d52-d63e5999fe09-#{host}",
       packages: ["Http"],
       allowEval: false,
       allowUrls: [host],
