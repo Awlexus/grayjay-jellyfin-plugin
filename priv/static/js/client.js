@@ -1,6 +1,25 @@
 let config = {};
 const PLATFORM = "Jellyfin";
 
+source.enable = enable;
+source.disable = disable;
+source.searchSuggestions = searchSuggestions;
+source.getHome = getHome;
+source.isContentDetailsUrl = isContentDetailsUrl;
+source.getContentDetails = getContentDetails;
+source.isChannelUrl = isChannelUrl;
+source.getChannel = getChannel;
+source.getChannelContents = getChannelContents;
+source.isPlaylistUrl = isPlaylistUrl;
+source.getPlaylist = getPlaylist;
+source.searchSuggestions = searchSuggestions;
+source.getSearchCapabilities = getSearchCapabilities;
+source.search = search;
+source.searchChannels = searchChannels;
+source.searchPlaylists = searchPlaylists;
+source.getComments = getComments;
+source.getSubComments = getSubComments;
+
 class JellyfinContentPager extends ContentPager {
   constructor({ url, type, limit = 20, errorMessage = "Could not fetch items" }) {
     let baseUrl;
@@ -53,29 +72,29 @@ class JellyfinSearchContentPager extends ContentPager {
   }
 }
 
-source.enable = function(conf) {
+function enable(conf) {
   config = conf;
   return config;
 };
 
-source.disable = function() { };
+function disable() { };
 
-source.searchSuggestions = function() {
+function searchSuggestions() {
   return [];
 };
 
-source.getHome = function(continuationToken) {
+function getHome(continuationToken) {
   return new JellyfinContentPager({
     url: toUrl("/Shows/NextUp?fields=DateCreated"),
     errorMessage: "Could not fetch latest updates",
   });
 };
 
-source.isContentDetailsUrl = function(url) {
+function isContentDetailsUrl(url) {
   return isType(url, ["Episode", "Video", "Audio"]);
 };
 
-source.getContentDetails = function(url) {
+function getContentDetails(url) {
   const parsed = new URL(url);
   const tokens = parsed.pathname.split("/");
   const itemId = tokens[tokens.length - 1];
@@ -238,11 +257,11 @@ function videoContent(details, mediaSources, itemId) {
   });
 }
 
-source.isChannelUrl = function(url) {
+function isChannelUrl(url) {
   return isType(url, ["Series", "Person", "Studio", "MusicArtist"]);
 };
 
-source.getChannel = function(url) {
+function getChannel(url) {
   const req = simpleJsonGet(url);
   const resp = req.body;
   let parsed = new URL(url);
@@ -251,7 +270,7 @@ source.getChannel = function(url) {
   return parseItem(resp);
 };
 
-source.getChannelContents = function(url) {
+function getChannelContents(url) {
   const itemId = urlId(url);
 
   return new JellyfinContentPager({
@@ -260,11 +279,11 @@ source.getChannelContents = function(url) {
   });
 };
 
-source.isPlaylistUrl = function(url) {
+function isPlaylistUrl(url) {
   return isType(url, ["Playlist", "MusicAlbum", "Season"]);
 };
 
-source.getPlaylist = function(url) {
+function getPlaylist(url) {
   let externalUrls = new Map();
   let parsed = new URL(url);
 
@@ -290,7 +309,7 @@ source.getPlaylist = function(url) {
   });
 };
 
-source.searchSuggestions = function(searchTerm) {
+function searchSuggestions(searchTerm) {
   try {
     const resp = simpleJsonGet(toUrl(`/Search/Hints?searchTerm=${searchTerm}`));
 
@@ -301,31 +320,21 @@ source.searchSuggestions = function(searchTerm) {
   }
 };
 
-source.getSearchCapabilities = function() {
+function getSearchCapabilities() {
   return {
     types: [Type.Feed.Mixed, Type.Feed.Streams, Type.Feed.Videos],
     sorts: [],
   };
 };
 
-source.search = function(query, type, order, filters, channelId) {
+function search(query, type, order, filters, channelId) {
   const url = toUrl('/Search/Hints?MediaTypes=Video,Audio')
 
   return new JellyfinSearchContentPager({ url, query, type, order, filters, channelId });
 };
 
-source.searchChannels = function(query) {
+function searchChannels(query) {
   const url = toUrl('/Search/Hints?includeItemTypes=Channel,Genre,MusicArtist,MusicGenre,Person,Series,Studio')
-  // const includeItemTypes = [
-  //   "Channel",
-  //   "LiveTvChannel",
-  //   "MusicArtist",
-  //   "MusicGenre",
-  //   "Person",
-  //   "Series",
-  //   "Studio",
-  // ];
-
   return new JellyfinSearchContentPager({ url, query });
 };
 
@@ -340,7 +349,7 @@ source.searchChannels = function(query) {
 //   return new ParentPaginator(channelUrl, query, type, order, filters);
 // };
 
-source.searchPlaylists = function(query, type, order, filters, channelId) {
+function searchPlaylists(query, type, order, filters, channelId) {
   const url = toUrl('/Search/Hints?includeItemTypes=Folder,ManualPlaylistsFolder,MusicAlbum,Playlist,PlaylistsFolder,Season')
 
   return new JellyfinSearchContentPager({ url, query, type, order, filters, channelId })
@@ -367,11 +376,11 @@ function genericSearch({ query, includeItemTypes, order, filters, channelId }) {
 }
 
 // Jellyfin does not have comments AFAIK
-source.getComments = function(url) {
+function getComments(url) {
   return new CommentPager([], false, {});
 };
 
-source.getSubComments = function(comment) {
+function getSubComments(comment) {
   return new CommentPager([], false, {});
 };
 
@@ -695,6 +704,4 @@ function withQuery(url, query) {
   let parsedUrl = new URL(url);
   for (let key in query) parsedUrl.searchParams.append(key, query[key]);
   return parsedUrl.toString();
-
-
 }
