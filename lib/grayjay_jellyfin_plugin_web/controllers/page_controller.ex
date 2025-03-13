@@ -35,7 +35,7 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
     host = URI.new!(uri).host
 
     json(conn, %{
-      name: "Plugin for Jellyfin",
+      name: "Jellyfin (#{host})",
       description: "An unofficial source for your own Jellyfin server",
       author: "awlexus",
       authorUrl: "https://github.com/awlexus",
