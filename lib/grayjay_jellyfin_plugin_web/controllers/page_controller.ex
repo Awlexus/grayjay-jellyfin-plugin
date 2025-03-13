@@ -3,7 +3,7 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
 
   alias GrayjayJellyfinPluginWeb.Signature
 
-  @plugin_version 2
+  @plugin_version 3
 
   def home(conn, %{"url" => url, "username" => username, "password" => password} = params) do
     host = prepare_host(url)
