@@ -131,12 +131,7 @@ function extractSources(details, mediaSource, itemId) {
         url: toUrl(mediaSource.TranscodingUrl),
         duration: toDuration(mediaSource.RunTimeTicks),
         priority: true,
-        requestModifier: {
-          headers: Object.assign(
-            mediaSource.RequiredHttpHeaders,
-            authHeaders(),
-          ),
-        },
+        requestModifier: { headers: mediaSource.RequiredHttpHeaders },
       }),
     );
   } else {
