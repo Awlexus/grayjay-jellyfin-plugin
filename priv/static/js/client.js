@@ -44,39 +44,38 @@ class JellyfinContentPager extends ContentPager {
 
 class JellyfinSearchContentPager extends ContentPager {
   // TODO: Do something with these filter options
-  constructor({ url = toUrl('/Search/Hints'), query, type, order, filters, channelId, jellyfinTypes, errorMessage = "Search failed" }) {
+  constructor({ url = toUrl('/Search/Hints'), query, type, order, filters, channelId, errorMessage = "Search failed" }) {
     let searchUrl = new URL(url);
     searchUrl.searchParams.append("SearchTerm", query);
-    searchUrl.searchParams.append("includeItemTypes", jellyfinTypes.join(","));
 
     let entries = simpleJsonGet(searchUrl.toString(), errorMessage).body.SearchHints.map(parseItem);
     super(entries, false);
   }
 }
 
-source.enable = function (conf) {
+source.enable = function(conf) {
   config = conf;
   return config;
 };
 
-source.disable = function () {};
+source.disable = function() { };
 
-source.searchSuggestions = function () {
+source.searchSuggestions = function() {
   return [];
 };
 
-source.getHome = function (continuationToken) {
+source.getHome = function(continuationToken) {
   return new JellyfinContentPager({
     url: toUrl("/Shows/NextUp?fields=DateCreated"),
     errorMessage: "Could not fetch latest updates",
   });
 };
 
-source.isContentDetailsUrl = function (url) {
+source.isContentDetailsUrl = function(url) {
   return isType(url, ["Episode", "Video", "Audio"]);
 };
 
-source.getContentDetails = function (url) {
+source.getContentDetails = function(url) {
   const parsed = new URL(url);
   const tokens = parsed.pathname.split("/");
   const itemId = tokens[tokens.length - 1];
@@ -244,11 +243,11 @@ function videoContent(details, mediaSources, itemId) {
   });
 }
 
-source.isChannelUrl = function (url) {
-  return isType(url, ["Series"]);
+source.isChannelUrl = function(url) {
+  return isType(url, ["Series", "Person", "Studio", "MusicArtist"]);
 };
 
-source.getChannel = function (url) {
+source.getChannel = function(url) {
   const req = simpleJsonGet(url);
   const resp = req.body;
   let parsed = new URL(url);
@@ -257,7 +256,7 @@ source.getChannel = function (url) {
   return parseItem(resp);
 };
 
-source.getChannelContents = function (url) {
+source.getChannelContents = function(url) {
   const itemId = urlId(url);
 
   return new JellyfinContentPager({
@@ -266,11 +265,11 @@ source.getChannelContents = function (url) {
   });
 };
 
-source.isPlaylistUrl = function (url) {
+source.isPlaylistUrl = function(url) {
   return isType(url, ["Playlist", "MusicAlbum", "Season"]);
 };
 
-source.getPlaylist = function (url) {
+source.getPlaylist = function(url) {
   let externalUrls = new Map();
   let parsed = new URL(url);
 
@@ -298,7 +297,7 @@ source.getPlaylist = function (url) {
   });
 };
 
-source.searchSuggestions = function (searchTerm) {
+source.searchSuggestions = function(searchTerm) {
   try {
     const resp = simpleJsonGet(toUrl(`/Search/Hints?searchTerm=${searchTerm}`));
 
@@ -309,38 +308,32 @@ source.searchSuggestions = function (searchTerm) {
   }
 };
 
-source.getSearchCapabilities = function () {
+source.getSearchCapabilities = function() {
   return {
     types: [Type.Feed.Mixed, Type.Feed.Streams, Type.Feed.Videos],
     sorts: [],
   };
 };
 
-source.search = function (query, type, order, filters, channelId) {
-  const includeItemTypes = [
-    "Audio",
-    "AudioBook",
-    "Episode",
-    "Movie",
-    "MusicVideo",
-    "Video",
-  ];
+source.search = function(query, type, order, filters, channelId) {
+  const url = toUrl('/Search/Hints?MediaTypes=Video,Audio')
 
-  return new JellyfinSearchContentPager({ query, type, order, filters, channelId, jellyfinTypes: includeItemTypes });
+  return new JellyfinSearchContentPager({ url, query, type, order, filters, channelId });
 };
 
-source.searchChannels = function (query) {
-  const includeItemTypes = [
-    "Channel",
-    "LiveTvChannel",
-    "MusicArtist",
-    "MusicGenre",
-    "Person",
-    "Series",
-    "Studio",
-  ];
+source.searchChannels = function(query) {
+  const url = toUrl('/Search/Hints?includeItemTypes=Channel,Genre,MusicArtist,MusicGenre,Person,Series,Studio')
+  // const includeItemTypes = [
+  //   "Channel",
+  //   "LiveTvChannel",
+  //   "MusicArtist",
+  //   "MusicGenre",
+  //   "Person",
+  //   "Series",
+  //   "Studio",
+  // ];
 
-  return new JellyfinSearchContentPager({ query, jellyfinTypes: includeItemTypes });
+  return new JellyfinSearchContentPager({ url, query });
 };
 
 
@@ -354,10 +347,10 @@ source.searchChannels = function (query) {
 //   return new ParentPaginator(channelUrl, query, type, order, filters);
 // };
 
-source.searchPlaylists = function (query, type, order, filters, channelId) {
-  const includeItemTypes = ["MusicAlbum", "Playlist", "Program"];
+source.searchPlaylists = function(query, type, order, filters, channelId) {
+  const url = toUrl('/Search/Hints?includeItemTypes=Folder,ManualPlaylistsFolder,MusicAlbum,Playlist,PlaylistsFolder,Season')
 
-  return new JellyfinSearchContentPager({query, type, order, filters, channelId, jellyfinTypes: includeItemTypes })
+  return new JellyfinSearchContentPager({ url, query, type, order, filters, channelId })
 };
 
 function genericSearch({ query, includeItemTypes, order, filters, channelId }) {
@@ -381,11 +374,11 @@ function genericSearch({ query, includeItemTypes, order, filters, channelId }) {
 }
 
 // Jellyfin does not have comments AFAIK
-source.getComments = function (url) {
+source.getComments = function(url) {
   return new CommentPager([], false, {});
 };
 
-source.getSubComments = function (comment) {
+source.getSubComments = function(comment) {
   return new CommentPager([], false, {});
 };
 
@@ -560,9 +553,9 @@ function author({ name, itemId, type }) {
     name,
     itemId && toUrl(`/Items/${itemId}?type=${type}`),
     itemId &&
-      toUrl(
-        `/Items/${itemId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`,
-      ),
+    toUrl(
+      `/Items/${itemId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`,
+    ),
   );
 }
 
@@ -648,14 +641,14 @@ function parseItem(item) {
         id: new PlatformID(PLATFORM, item.Id, config.id),
         name: item.Name,
         description: item.Overview,
-        thumbnail: toUrl(`/Items/${item.Id}/Images/Primary?fillWidth=240`),
-        banner: toUrl(`/Items/${item.Id}/Images/Backdrop`),
+        thumbnail: thumbnail(item),
+        banner: banner(item),
         url: toUrl(`/Items/${item.Id}?type=${item.Type}`),
         links: item.ExternalUrls?.reduce((acc, item) => {
           acc[item.Name] = item.Url;
           return acc;
         }, {})
-        
+
       });
     // return new
 
@@ -667,8 +660,35 @@ function parseItem(item) {
         id: new PlatformID(PLATFORM, item.Id, config.id),
         name: item.Name,
         url: toUrl(`/Items/${item.Id}?type=${item.Type}`),
-        thumbnail: toUrl(`/Items/${item.Id}/Images/Primary?fillWidth=240`),
+        thumbnail: thumbnail(item, { fillWidth: 240 }),
         author: extractItemAuthor(item, item.Type),
       });
   }
+}
+
+function thumbnail(item, order = ["Primary", "Logo", "Thumb"], query) {
+  let type = order.find((type) => type in item.imageTags);
+  let tag = item.ImageTags[type];
+
+  let url = toUrl(`/Items/${item.Id}/Images/${type}?tag=${tag}`);
+
+  return withQuery(url, query);
+}
+
+function banner(item, query) {
+  if (item.BackdropImaeTags.length > 0) {
+    return withQuery(toUrl(`/Items/${item.Id}/Images/Backdrop`), query);
+  } else {
+    return thumbnail(item, query);
+  }
+}
+
+function withQuery(url, query) {
+  if (query == null) return url;
+
+  let parsedUrl = new URL(url);
+  for (let key in query) parsedUrl.searchParams.append(key, query[key]);
+  return parsedUrl.toString();
+
+
 }
