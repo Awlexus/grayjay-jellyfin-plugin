@@ -93,16 +93,29 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
   end
 
   defp prepare_host(url) do
-    uri = URI.new!(url)
+    uri = URI.parse(url)
+
+    {host, path} =
+      cond do
+        is_binary(uri.host) && is_binary(uri.path) ->
+          {uri.host, uri.path}
+
+        is_binary(uri.path) and uri.path =~ "/" ->
+          [host, path] = String.split(uri.path, "/", parts: 2)
+          {host, "/" <> path}
+
+        true ->
+          {uri.path, nil}
+      end
 
     uri = %URI{
       uri
-      | path: uri.path,
+      | path: path,
         query: nil,
         fragment: nil,
         userinfo: nil,
         scheme: uri.scheme || "https",
-        host: uri.host || uri.path
+        host: host
     }
 
     to_string(uri)
