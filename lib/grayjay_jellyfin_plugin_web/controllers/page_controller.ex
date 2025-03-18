@@ -70,7 +70,7 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
 
     url = Path.join(host, "Users/AuthenticateByName")
 
-    case Req.post(url, json: body, headers: headers) |> dbg() do
+    case Req.post(url, json: body, headers: headers) do
       {:ok, %Req.Response{status: 200, body: %{"AccessToken" => access_token}}} ->
         {:ok, Map.put(header_keys, :token, access_token)}
 
