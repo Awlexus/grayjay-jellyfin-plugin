@@ -48,7 +48,7 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
       id: "1d00dfbf-aa8d-4e3a-8d52-d63e5999fe09-#{host}",
       packages: ["Http"],
       allowEval: false,
-      allowUrls: [host, "192.168.1.11"],
+      allowUrls: [host],
       constants: params,
       changelog: changelog()
     })
