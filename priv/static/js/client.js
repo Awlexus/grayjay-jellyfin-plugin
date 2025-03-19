@@ -42,7 +42,6 @@ class JellyfinContentPager extends ContentPager {
     let authorCache = {};
     let authors = extractAuthors(items, authorCache);
     let entries = formatEntries({ items, authors });
-    console.log("Cache + authors", authorCache, authors)
     // let entries = body.Items.map(formatItem);
 
     const totalItemCount = body.TotalRecordCount;
