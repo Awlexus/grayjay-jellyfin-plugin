@@ -310,7 +310,7 @@ function getChannelContents(url) {
 };
 
 function isPlaylistUrl(url) {
-  return isType(url, ["Playlist", "MusicAlbum", "Season"]);
+  return isType(url, ["Playlist", "MusicAlbum", "Season", "Folder"]);
 };
 
 function getPlaylist(url) {
