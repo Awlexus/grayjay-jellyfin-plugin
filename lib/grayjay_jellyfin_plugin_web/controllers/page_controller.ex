@@ -3,7 +3,7 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
 
   alias GrayjayJellyfinPluginWeb.Signature
 
-  @plugin_version 3
+  @plugin_version 4
 
   def home(conn, %{"url" => url, "username" => username, "password" => password} = params) do
     host = prepare_host(url)
@@ -48,8 +48,9 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
       id: "1d00dfbf-aa8d-4e3a-8d52-d63e5999fe09-#{host}",
       packages: ["Http"],
       allowEval: false,
-      allowUrls: [host],
-      constants: params
+      allowUrls: [host, "192.168.1.11"],
+      constants: params,
+      changelog: changelog()
     })
   end
 
@@ -119,5 +120,16 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
     }
 
     to_string(uri)
+  end
+
+  defp changelog() do
+    %{
+      4 => [
+        "Properly fetch Authors in lists",
+        "Improve fetching playlist item details",
+        "Improve fetching channels contents"
+        
+      ]
+    }
   end
 end

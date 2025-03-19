@@ -38,7 +38,12 @@ class JellyfinContentPager extends ContentPager {
     }
 
     let body = simpleJsonGet(baseUrl.toString(), errorMessage).body;
-    let entries = body.Items.map(parseItem);
+    let items = body.Items;
+    let authorCache = {};
+    let authors = extractAuthors(items, authorCache);
+    let entries = formatEntries({ items, authors });
+    console.log("Cache + authors", authorCache, authors)
+    // let entries = body.Items.map(formatItem);
 
     const totalItemCount = body.TotalRecordCount;
     super(entries, entries.length < totalItemCount);
@@ -48,13 +53,17 @@ class JellyfinContentPager extends ContentPager {
     this.errorMessage = errorMessage;
     this.totalItemCount = totalItemCount;
     this.currentIndex = 0;
+    this.authorCache = authorCache;
   }
 
   nextPage() {
     this.currentIndex += this.limit;
     this.url.searchParams.set('startIndex', this.currentIndex);
 
-    this.results = simpleJsonGet(this.url.toString(), this.errorMessage).body.Items.map(parseItem);
+    let body = simpleJsonGet(this.url.toString(), this.errorMessage).body;
+    let items = body.Items;
+    let authors = extractAuthors(items, this.authorCache);
+    this.results = formatEntries({ items, authors });
     this.hasMore = this.currentIndex + this.results.length < this.totalItemCount;
 
     return this;
@@ -63,12 +72,32 @@ class JellyfinContentPager extends ContentPager {
 
 class JellyfinSearchContentPager extends ContentPager {
   // TODO: Do something with these filter options
-  constructor({ url = toUrl('/Search/Hints'), query, type, order, filters, channelId, errorMessage = "Search failed" }) {
+  constructor({ url = toUrl('/Search/Hints'), query, type, order, filters, channelId, errorMessage = "Search failed", limit = 20 }) {
     let searchUrl = new URL(url);
     searchUrl.searchParams.append("SearchTerm", query);
 
-    let entries = simpleJsonGet(searchUrl.toString(), errorMessage).body.SearchHints.map(parseItem);
-    super(entries, false);
+    const body = simpleJsonGet(searchUrl.toString(), errorMessage).body;
+    const items = body.SearchHints.map((hint) => hint.Id);
+
+    super([], items.length > 0);
+    this.errorMessage = errorMessage;
+    this.items = items;
+    this.limit = limit;
+    this.authorCache = {};
+  }
+
+  nextPage() {
+    const requestedItems = this.items.slice(0, this.limit);
+    const url = toUrl(`/Items?ids=${requestedItems.join(",")}`);
+    let body = simpleJsonGet(url, this.errorMessage).body;
+    let items = body.Items;
+    let authors = extractAuthors(items, this.authorCache);
+    this.results = formatEntries({ items, authors })
+    this.items = this.items.slice(this.limit);
+    this.hasMore = this.items.length > 0;
+
+    return this;
+
   }
 }
 
@@ -78,10 +107,6 @@ function enable(conf) {
 };
 
 function disable() { };
-
-function searchSuggestions() {
-  return [];
-};
 
 function getHome(continuationToken) {
   return new JellyfinContentPager({
@@ -174,8 +199,9 @@ function extractSources(details, mediaSource, itemId) {
         sources.push(
           new AudioUrlSource({
             name: mediaStream.Type,
-            bitrate: mediaStream.Bitrate,
             container: mediaStream.Container,
+            codecs: [mediaStream.Codec],
+            bitrate: mediaStream.BitRate,
             duration: toDuration(mediaSource.RunTimeTicks),
             url: toUrl(`/Audio/${itemId}/stream`),
           }),
@@ -218,9 +244,11 @@ function audioContent(details, mediaSources, itemId) {
     itemId,
   );
 
+  const [author] = extractAuthors([details], {});
+
   return new PlatformVideoDetails({
     id: new PlatformID(PLATFORM, details.Id, config.id),
-    author: extractItemAuthor(details, "Audio"),
+    author: author,
     name: details.Name,
     thumbnails: itemThumbnails(details.AlbumId),
     dateTime:
@@ -241,9 +269,11 @@ function videoContent(details, mediaSources, itemId) {
     itemId,
   );
 
+  const [author] = extractAuthors([details], {});
+
   return new PlatformVideoDetails({
     id: new PlatformID(PLATFORM, details.Id, config.id),
-    author: extractItemAuthor(details, "Video"),
+    author: author,
     name: details.Name,
     thumbnails: itemThumbnails(details.Id),
     dateTime: new Date(details.DateCreated).getTime() / 1000,
@@ -258,16 +288,17 @@ function videoContent(details, mediaSources, itemId) {
 }
 
 function isChannelUrl(url) {
-  return isType(url, ["Series", "Person", "Studio", "MusicArtist"]);
+  // TODO: Add back Person, Studio
+  return isType(url, ["Series", "MusicArtist"]);
 };
 
 function getChannel(url) {
   const req = simpleJsonGet(url);
-  const resp = req.body;
+  const item = req.body;
   let parsed = new URL(url);
-  parsed.searchParams.set("type", resp.Type);
+  parsed.searchParams.set("type", item.Type);
 
-  return parseItem(resp);
+  return formatItem(item);
 };
 
 function getChannelContents(url) {
@@ -288,6 +319,7 @@ function getPlaylist(url) {
   let parsed = new URL(url);
 
   const item = simpleJsonGet(url).body;
+  const [author] = extractAuthors([item], {});
   parsed.searchParams.set("type", item.Type);
 
   const contents = new JellyfinContentPager({
@@ -304,7 +336,7 @@ function getPlaylist(url) {
     description: item.Overview,
     url: parsed.toString(),
     links: externalUrls,
-    author: extractItemAuthor(item, item.Type),
+    author: author,
     contents: contents,
   });
 };
@@ -334,7 +366,9 @@ function search(query, type, order, filters, channelId) {
 };
 
 function searchChannels(query) {
-  const url = toUrl('/Search/Hints?includeItemTypes=Channel,Genre,MusicArtist,MusicGenre,Person,Series,Studio')
+  // TODO: Add back Person, Studio
+  const url = toUrl('/Search/Hints?includeItemTypes=Channel,Genre,MusicArtist,MusicGenre,Series')
+
   return new JellyfinSearchContentPager({ url, query });
 };
 
@@ -354,26 +388,6 @@ function searchPlaylists(query, type, order, filters, channelId) {
 
   return new JellyfinSearchContentPager({ url, query, type, order, filters, channelId })
 };
-
-function genericSearch({ query, includeItemTypes, order, filters, channelId }) {
-  let url = new URL(toUrl(`/Search/Hints`));
-  url.searchParams.append("SearchTerm", query);
-  url.searchParams.append("includeItemTypes", includeItemTypes.join(","));
-
-  if (order != null) {
-    // TODO
-  }
-
-  if (filters != null) {
-    // TODO
-  }
-
-  if (channelId != null) {
-    // TODO
-  }
-
-  return simpleJsonGet(url.toString()).body.SearchHints.map(parseItem);
-}
 
 // Jellyfin does not have comments AFAIK
 function getComments(url) {
@@ -506,58 +520,12 @@ function toDuration(runTimeTicks) {
   return Math.round(runTimeTicks / 10_000_000);
 }
 
-function extractItemAuthor(item, context) {
-  switch (item.Type) {
-    case "Episode":
-    case "Season":
-      return author({
-        itemId: item.SeriesId,
-        name: item.SeriesName,
-        type: "Series",
-      });
-
-    case "Audio":
-      if (item.AlbumId)
-        return author({
-          itemId: item.AlbumId,
-          name: item.Album,
-          type: "Album",
-        });
-      if (context !== "MusicAlbum") break;
-
-    case "MusicAlbum":
-      let artist;
-      if (item.AlbumArtist != null) {
-        artist = item?.AlbumArtists?.find(
-          (x) => x.Name == item.AlbumArtist,
-        ) || { Name: item.AlbumArtist };
-      } else if (item.Artist != null) {
-        artist = item?.ArtistItems?.find((x) => x.Name == item.Artist) || {
-          Name: item.Artist,
-        };
-      }
-
-      if (artist != null) {
-        return author({
-          itemId: artist.Id,
-          name: artist.Name,
-          type: "MusicArtist",
-        });
-      }
-      break;
-  }
-  return null;
-}
-
-function author({ name, itemId, type }) {
+function author(item) {
   return new PlatformAuthorLink(
-    new PlatformID(PLATFORM, itemId, config.id),
-    name,
-    itemId && toUrl(`/Items/${itemId}?type=${type}`),
-    itemId &&
-    toUrl(
-      `/Items/${itemId}/Images/Primary?fillWidth=64&fillHeight=64&quality=60`,
-    ),
+    new PlatformID(PLATFORM, item.Id, config.id),
+    item.Name,
+    itemUrl(item),
+    thumbnail({ item, query: { fillWidth: 256} })
   );
 }
 
@@ -587,7 +555,8 @@ function itemThumbnails(itemId) {
 }
 
 function urlId(url) {
-  return new URL(url).pathname.split("/")[2];
+  const segments = new URL(url).pathname.split("/")
+  return segments[segments.length - 1];
 }
 
 function parseItem(item) {
@@ -604,7 +573,6 @@ function parseItem(item) {
         url: toUrl(`/Items/${item.Id}?type=Video`),
         duration: toDuration(item.RunTimeTicks),
         isLive: false,
-        author: extractItemAuthor(item, item.Type),
       });
 
     case "Audio":
@@ -618,7 +586,6 @@ function parseItem(item) {
         url: toUrl(`/Items/${item.Id}?type=Audio`),
         duration: toDuration(item.RunTimeTicks),
         isLive: false,
-        author: extractItemAuthor(item, item.Type),
       });
     case "AudioBook":
       return new PlatformVideo({
@@ -636,7 +603,7 @@ function parseItem(item) {
     // case "LiveTvChannel":
     case "MusicArtist":
     // case "MusicGenre":
-    case "Person":
+    // case "Person":
     case "Studio":
     case "Series":
       return new PlatformChannel({
@@ -663,17 +630,146 @@ function parseItem(item) {
         name: item.Name,
         url: toUrl(`/Items/${item.Id}?type=${item.Type}`),
         thumbnail: banner({ item }),
-        author: extractItemAuthor(item, item.Type),
       });
   }
+}
+
+function extractAuthors(items, authors) {
+  const authorIds = items.map(authorId);
+  const uniqueIds = authorIds
+    .filter(id => id != null)
+    .filter(authorId => !(authorId in authors))
+    .filter(onlyUnique);
+
+  if (uniqueIds.length == 0) return [];
+
+  simpleJsonGet(toUrl(`/Items?Ids=${uniqueIds.join(",")}`))
+    .body
+    .Items
+    .forEach((item) => authors[item.Id] = author(item));
+
+  return authorIds.map((id) => id && authors[id]);
+}
+
+function authorId(item) {
+  switch (item.Type) {
+    case "Episode":
+    case "Season":
+      return item.SeriesId;
+
+    case "Audio":
+    case "MusicAlbum":
+      if (item.AlbumArtists.length > 0) {
+        return item.AlbumArtists[0].Id;
+      }
+
+      if (item.Artists.length > 0) {
+        return item.Artists[0].Id;
+      }
+      return null;
+
+    case "Movie":
+      if (item.Studios.length > 0) {
+        return item.Studios[0].Id;
+      }
+      return null;
+
+    default:
+      return null;
+  }
+};
+
+function formatEntries({ items, authors }) {
+  return zip(items, authors).map(([item, author]) => {
+    return formatItem(item, author)
+  });
+}
+
+function zip(...args) {
+  const [first, ...rest] = args;
+
+  return first.map((item, i) => {
+    let acc = [item];
+    rest.forEach((other) => acc.push(other[i]))
+    return acc;
+  });
+}
+
+function formatItem(item, author) {
+  const url = toUrl(`/Items/${item.Id}?type=${item.Type}`);
+
+  switch (item.Type) {
+    case "Folder":
+    case "ManualPlaylistFolder":
+    case "Playlist":
+    case "PlaylistsFolder":
+    case "MusicAlbum":
+    case "Season":
+      return new PlatformPlaylist({
+        id: itemId(item),
+        author: author,
+        name: item.Name,
+        url: url,
+        thumbnail: banner({ item }),
+        datetime: parseDate(item.PremiereDate || item.DateCreated),
+        videoCount: item.ChildCount
+      });
+
+    case "Channel":
+    case "Genre":
+    case "MusicArtist":
+    case "MusicGenre":
+    // case "Person":
+    case "Series":
+    case "Studio":
+      return new PlatformChannel({
+        id: itemId(item),
+        name: item.Name,
+        description: item.Overview || item.Description,
+        url: url,
+        thumbnail: thumbnail({ item, order: ["Logo", "Thumb", "Primary"], query: { fillWidth: 128 } }),
+        banner: banner({ item }),
+        links: item.ExternalUrls?.reduce((acc, item) => {
+          acc[item.Name] = item.Url;
+          return acc;
+        }, {})
+      });
+
+    default:
+      switch (item.MediaType) {
+        case "Video":
+        case "Audio":
+          return new PlatformVideo({
+            id: itemId(item),
+            author: author,
+            name: item.Name,
+            thumbnails: itemThumbnails(item.Id),
+            url: url,
+            duration: toDuration(item.RunTimeTicks),
+            isLive: false,
+            viewCount: item.UserData.PlaybackCount,
+            datetime: parseDate(item.PremiereDate || item.DateCreated),
+        });
+
+      }
+  };
+  throw new ScriptException("Unknown item type");
+}
+
+function itemId(item) {
+  return new PlatformID(PLATFORM, item.Id, config.id);
+}
+
+function itemUrl({ Id, Type }) {
+  return toUrl(`/Items/${Id}?type=${Type}`)
 }
 
 function thumbnail({ item, order = ["Primary", "Logo", "Thumb"], query }) {
   let type;
   let tag;
 
-  if (item.imageTags != null) {
-    type = order.find((type) => type in item.imageTags);
+  if (item.ImageTags != null) {
+    type = order.find((type) => type in item.ImageTags);
     tag = item.ImageTags[type];
   } else {
     type = order.find((type) => `${type}ImageTag` in item);
@@ -704,4 +800,8 @@ function withQuery(url, query) {
   let parsedUrl = new URL(url);
   for (let key in query) parsedUrl.searchParams.append(key, query[key]);
   return parsedUrl.toString();
+}
+
+function parseDate(value) {
+  return new Date(value).getTime() / 1000;
 }
