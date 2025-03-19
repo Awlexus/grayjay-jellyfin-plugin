@@ -199,7 +199,7 @@ function extractSources(details, mediaSource, itemId) {
           new AudioUrlSource({
             name: mediaStream.Type,
             container: mediaStream.Container,
-            codecs: [mediaStream.Codec],
+            codec: mediaStream.Codec,
             bitrate: mediaStream.BitRate,
             duration: toDuration(mediaSource.RunTimeTicks),
             url: toUrl(`/Audio/${itemId}/stream`),
