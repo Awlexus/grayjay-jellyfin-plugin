@@ -127,8 +127,9 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
       4 => [
         "Properly fetch Authors in lists",
         "Improve fetching playlist item details",
-        "Improve fetching channels contents"
-        
+        "Improve fetching channels contents",
+        "Known issue: Audio content like songs may not have thumbnails",
+        "Known issue: Some content may not show the correct thumbnail"
       ]
     }
   end
