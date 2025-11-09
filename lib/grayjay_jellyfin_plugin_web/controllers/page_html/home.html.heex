@@ -2,21 +2,29 @@
 
 <div class="block sm:flex h-screen justify-center items-center">
   <div class="flex flex-col sm:flex-row gap-5">
-    <div class={["max-w-3xl w-full sm:h-min bg-slate-200 p-8 rounded-lg shadow", if !@url do "h-screen" end]}>
+    <div class={[
+      "max-w-3xl w-full sm:h-min bg-slate-200 p-8 rounded-lg shadow",
+      if !@url do
+        "h-screen"
+      end
+    ]}>
       <h1 class="text-4xl font-semibold">Grayjay Jellyfin plugin</h1>
 
-      <p class="mt-3 text-xl">Fill in the following fields to generate a QR code for your server</p>
+      <p class="mt-3 text-xl">
+        Fill in the following fields to generate a QR code for your server
+      </p>
 
       <.form :let={f} for={@conn.params} class="flex flex-col gap-y-2 mt-3" action="/">
-        <.input field={f[:url]} placeholder="Server url" label="Server url"/>
-        <.input field={f[:username]} placeholder="Username" label="Username"/>
-        <.input field={f[:password]} placeholder="Password" label="Password" type="password"/>
+        <.input field={f[:url]} placeholder="Server url" label="Server url" />
+        <.input field={f[:username]} placeholder="Username" label="Username" />
+        <.input field={f[:password]} placeholder="Password" label="Password" type="password" />
         <.input field={f[:device_name]} placeholder="Device name" label="Device name (Optional)" />
         <.button>Generate QR code</.button>
       </.form>
 
-      <.button :if={@url} class="my-2 w-full" onclick="copyContent(this)" data-content={@url}>Copy Url</.button>
-
+      <.button :if={@url} class="my-2 w-full" onclick="copyContent(this)" data-content={@url}>
+        Copy Url
+      </.button>
     </div>
     <div :if={@url} class="bg-white rounded mx-auto hidden sm:block">
       <div class="border border-black p-6 w-screen-fit">

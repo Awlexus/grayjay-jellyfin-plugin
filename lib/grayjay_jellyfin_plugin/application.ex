@@ -9,7 +9,8 @@ defmodule GrayjayJellyfinPlugin.Application do
   def start(_type, _args) do
     children = [
       GrayjayJellyfinPluginWeb.Telemetry,
-      {DNSCluster, query: Application.get_env(:grayjay_jellyfin_plugin, :dns_cluster_query) || :ignore},
+      {DNSCluster,
+       query: Application.get_env(:grayjay_jellyfin_plugin, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: GrayjayJellyfinPlugin.PubSub},
       # Start a worker by calling: GrayjayJellyfinPlugin.Worker.start_link(arg)
       # {GrayjayJellyfinPlugin.Worker, arg},
