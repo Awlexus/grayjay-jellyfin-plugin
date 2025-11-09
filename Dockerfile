@@ -51,6 +51,8 @@ COPY lib lib
 
 COPY assets assets
 
+COPY assets/js/client.js priv/static/js/client.js
+
 # compile assets
 RUN mix assets.deploy
 

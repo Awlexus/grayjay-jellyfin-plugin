@@ -30,6 +30,10 @@ config :esbuild,
       ~w(js/app.js --bundle --target=es2017 --outdir=../priv/static/assets --external:/fonts/* --external:/images/*),
     cd: Path.expand("../assets", __DIR__),
     env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
+  ],
+  script: [
+    args: ~w(js/client.js --outdir=../priv/static/js),
+    cd: Path.expand("../assets", __DIR__)
   ]
 
 # Configure tailwind (the version is required)

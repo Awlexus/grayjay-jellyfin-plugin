@@ -474,6 +474,19 @@ function batchedRequests(requests, error) {
 }
 
 function isType(url, types) {
+  let itemId = null;
+  let type = null;
+
+  if (url.startsWith(toUrl("/Items"))) {
+    let parsed = new URL(url);
+    type = parsed.searchParams.get("type");
+    itemId = tokens[tokens.length - 1];
+  } else if  (url.startsWith(toUrl("/stable/web/#/details"))) {
+    let params = new URLSearchParams(url.replace(pattern, ""));
+    let id = params._entries.id
+    if (id == null || id[0] == null) continue;
+  }
+
   if (url.startsWith(toUrl("/Items"))) {
     let parsed = new URL(url);
     let type = parsed.searchParams.get("type");
@@ -490,9 +503,20 @@ function isType(url, types) {
     } else {
       return types.includes(parsed.searchParams.get("type"));
     }
-  } else {
-    return false;
   }
+  let pattern = toUrl("/stable/web/#/details");
+
+  if (url.startsWith(pattern)){
+    let params = new URLSearchParams(url.replace(pattern, ""));
+    let id = params._entries.id
+
+    if (id == null || id[0] == null) return false;
+    
+    let resp = simpleJsonGet(toUrl(`/Items/$(id[0])`))
+    return types.includes(resp.body.type)
+  } else {
+  }
+  return false;
 }
 
 function onlyUnique(value, index, array) {
@@ -803,4 +827,12 @@ function withQuery(url, query) {
 
 function parseDate(value) {
   return new Date(value).getTime() / 1000;
+}
+
+function getURLSearchParam(searchParams, key) {
+  let all = searchParams._entries[key];
+  if (all == null) return null;
+  if (!all.constructor == Array) return null;
+  if (all.length == 0) return null;
+  return all[0];
 }
