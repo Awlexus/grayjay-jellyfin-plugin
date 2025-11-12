@@ -55,7 +55,8 @@ defmodule GrayjayJellyfinPlugin.MixProject do
       {:bandit, "~> 1.5"},
       {:qr_code, "~> 3.1"},
       {:req, "~> 0.5.6"},
-      {:uuidv7, "~> 1.0"}
+      {:uuidv7, "~> 1.0"},
+      {:file_system, "~> 1.0"}
     ]
   end
 

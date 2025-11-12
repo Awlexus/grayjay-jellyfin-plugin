@@ -17,6 +17,7 @@ config :grayjay_jellyfin_plugin, GrayjayJellyfinPluginWeb.Endpoint,
   watchers: [
     esbuild:
       {Esbuild, :install_and_run, [:grayjay_jellyfin_plugin, ~w(--sourcemap=inline --watch)]},
+    mix: ~w"file_copy assets/js/client.js priv/static/js/client.js",
     tailwind: {Tailwind, :install_and_run, [:grayjay_jellyfin_plugin, ~w(--watch)]}
   ]
 
