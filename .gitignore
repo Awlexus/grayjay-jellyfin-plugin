@@ -35,6 +35,8 @@ grayjay_jellyfin_plugin-*.tar
 # In case you use Node.js/npm, you want to ignore these.
 npm-debug.log
 /assets/node_modules/
+/assets/js/JELLYFIN_TEST.json
+/assets/js/JELLYFIN_TEST.auth.json
 
 .ssh/
 

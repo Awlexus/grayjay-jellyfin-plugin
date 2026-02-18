@@ -39,7 +39,19 @@ and start watching your content.
 # Development
 
 ## Plugin code
-The code for the plugin itself can be found under `/priv/static/js/client.js`. 
+The plugin source code lives at `assets/js/client.js`.
+It is copied/built to `priv/static/js/client.js` for serving.
+
+## TDD workflow
+
+Write failing tests first, implement, then rerun the relevant suite.
+
+- `mix test.plugin.unit` runs deterministic unit tests for `client.js`.
+- `mix test.plugin.contract` runs manual live contract tests against Jellyfin.
+
+Contract tests use local JSON credentials in `assets/js/JELLYFIN_TEST.json` and
+`assets/js/JELLYFIN_TEST.auth.json`. Before tests run, the auth token is
+validated and automatically refreshed when expired.
 
 ## Start the server
 

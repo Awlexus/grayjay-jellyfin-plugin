@@ -1,0 +1,9 @@
+{
+  "name": "grayjay-jellyfin-plugin-assets",
+  "private": true,
+  "scripts": {
+    "test:plugin:unit": "node --test js/test/client.unit.test.cjs",
+    "test:plugin:contract": "node --test js/test/client.contract.test.cjs",
+    "test:plugin": "npm run test:plugin:unit && npm run test:plugin:contract"
+  }
+}

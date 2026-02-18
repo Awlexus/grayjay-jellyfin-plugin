@@ -474,48 +474,45 @@ function batchedRequests(requests, error) {
 }
 
 function isType(url, types) {
-  let itemId = null;
-  let type = null;
+  const itemsPrefix = toUrl("/Items");
+  const detailsPrefix = toUrl("/web/#/details");
 
-  if (url.startsWith(toUrl("/Items"))) {
-    let parsed = new URL(url);
-    type = parsed.searchParams.get("type");
-    itemId = tokens[tokens.length - 1];
-  } else if  (url.startsWith(toUrl("/stable/web/#/details"))) {
-    let params = new URLSearchParams(url.replace(pattern, ""));
-    let id = params._entries.id
-    if (id == null || id[0] == null) continue;
-  }
+  if (url.startsWith(itemsPrefix)) {
+    const parsed = new URL(url);
+    const typeParam = parsed.searchParams.get("type");
 
-  if (url.startsWith(toUrl("/Items"))) {
-    let parsed = new URL(url);
-    let type = parsed.searchParams.get("type");
-
-    if (type == null) {
-      const tokens = url.split("/");
-      const itemId = tokens[tokens.length - 1];
-      let resp = simpleJsonGet(
-        toUrl(`/Items/${itemId}`),
-        "Could not fetch details",
-      );
-
-      return types.includes(resp.body.Type);
-    } else {
-      return types.includes(parsed.searchParams.get("type"));
+    if (typeParam != null) {
+      return types.includes(typeParam);
     }
-  }
-  let pattern = toUrl("/stable/web/#/details");
 
-  if (url.startsWith(pattern)){
-    let params = new URLSearchParams(url.replace(pattern, ""));
-    let id = params._entries.id
+    const segments = parsed.pathname.split("/");
+    const itemId = segments[segments.length - 1];
+    const resp = simpleJsonGet(
+      toUrl(`/Items/${itemId}`),
+      "Could not fetch details",
+    );
 
-    if (id == null || id[0] == null) return false;
-    
-    let resp = simpleJsonGet(toUrl(`/Items/$(id[0])`))
-    return types.includes(resp.body.type)
-  } else {
+    return types.includes(resp.body.Type);
   }
+
+  if (url.startsWith(detailsPrefix)) {
+    const params = new URLSearchParams(url.replace(detailsPrefix, ""));
+    const idParam =
+      (typeof params.get === "function" ? params.get("id") : null) ||
+      params._entries?.id?.[0];
+
+    if (idParam == null) {
+      return false;
+    }
+
+    const resp = simpleJsonGet(
+      toUrl(`/Items/${idParam}`),
+      "Could not fetch details",
+    );
+
+    return types.includes(resp.body.Type);
+  }
+
   return false;
 }
 
@@ -675,6 +672,9 @@ function extractAuthors(items, authors) {
 }
 
 function authorId(item) {
+  const firstId = (value) =>
+    Array.isArray(value) && value.length > 0 ? value[0].Id : null;
+
   switch (item.Type) {
     case "Episode":
     case "Season":
@@ -682,20 +682,10 @@ function authorId(item) {
 
     case "Audio":
     case "MusicAlbum":
-      if (item.AlbumArtists.length > 0) {
-        return item.AlbumArtists[0].Id;
-      }
-
-      if (item.Artists.length > 0) {
-        return item.Artists[0].Id;
-      }
-      return null;
+      return firstId(item.AlbumArtists) || firstId(item.Artists);
 
     case "Movie":
-      if (item.Studios.length > 0) {
-        return item.Studios[0].Id;
-      }
-      return null;
+      return firstId(item.Studios);
 
     default:
       return null;
@@ -835,4 +825,54 @@ function getURLSearchParam(searchParams, key) {
   if (!all.constructor == Array) return null;
   if (all.length == 0) return null;
   return all[0];
+}
+
+const testExports = {
+  enable,
+  disable,
+  getHome,
+  isContentDetailsUrl,
+  getContentDetails,
+  isChannelUrl,
+  getChannel,
+  getChannelContents,
+  isPlaylistUrl,
+  getPlaylist,
+  searchSuggestions,
+  getSearchCapabilities,
+  search,
+  searchChannels,
+  searchPlaylists,
+  getComments,
+  getSubComments,
+  JellyfinContentPager,
+  JellyfinSearchContentPager,
+  authHeaders,
+  toUrl,
+  simpleJsonGet,
+  simpleGet,
+  batchedJSONRequests,
+  batchedRequests,
+  isType,
+  map_push_duplicate,
+  onlyUnique,
+  toDuration,
+  itemThumbnails,
+  urlId,
+  parseItem,
+  extractAuthors,
+  formatEntries,
+  zip,
+  formatItem,
+  itemId,
+  itemUrl,
+  thumbnail,
+  banner,
+  withQuery,
+  parseDate,
+  getURLSearchParam,
+};
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = testExports;
 }

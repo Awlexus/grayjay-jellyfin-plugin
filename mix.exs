@@ -71,6 +71,8 @@ defmodule GrayjayJellyfinPlugin.MixProject do
       setup: ["deps.get", "assets.setup", "assets.build"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["tailwind grayjay_jellyfin_plugin", "esbuild grayjay_jellyfin_plugin"],
+      "test.plugin.unit": ["cmd --cd assets npm run test:plugin:unit"],
+      "test.plugin.contract": ["cmd --cd assets npm run test:plugin:contract"],
       "assets.deploy": [
         "tailwind grayjay_jellyfin_plugin --minify",
         "esbuild grayjay_jellyfin_plugin --minify",
