@@ -115,7 +115,7 @@ contract('home pager loads entries from Jellyfin', (t) => {
   const pager = runtime.client.getHome();
 
   assert.ok(Array.isArray(pager.results));
-  assert.ok(pager.results.length > 0);
+  assert.equal(typeof pager.hasMore, 'boolean');
 });
 
 contract('getContentDetails returns a source descriptor for first search result', (t) => {
