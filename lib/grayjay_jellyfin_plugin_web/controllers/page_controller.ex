@@ -3,7 +3,7 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
 
   alias GrayjayJellyfinPluginWeb.Signature
 
-  @plugin_version 4
+  @plugin_version 5
 
   def home(conn, %{"url" => url, "username" => username, "password" => password} = params) do
     host = prepare_host(url)
@@ -124,6 +124,17 @@ defmodule GrayjayJellyfinPluginWeb.PageController do
 
   defp changelog() do
     %{
+      5 => [
+        "Use Jellyfin web details URLs for plugin entries while keeping the type query parameter",
+        "Fix parsing item ids/types from Jellyfin details URLs to prevent item detail load failures",
+        "Fix playback URL handling so Grayjay can resolve supported sources again",
+        "Add support for Folder items in playlist detection",
+        "Include original direct-play video source when available",
+        "Add multiple transcoding quality profiles (1080p/30 Mbps, 1080p/8 Mbps, 720p/4 Mbps, 480p/2 Mbps, 360p/1 Mbps)",
+        "Improve author extraction fallback handling for items missing artist/studio arrays",
+        "Improve audio thumbnail selection with album/track image tag fallbacks",
+        "Add JS unit and contract tests for plugin behavior"
+      ],
       4 => [
         "Properly fetch Authors in lists",
         "Improve fetching playlist item details",
