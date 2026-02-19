@@ -115,13 +115,15 @@ function getHome(continuationToken) {
 };
 
 function isContentDetailsUrl(url) {
-  return isType(url, ["Episode", "Video", "Audio"]);
+  return isType(url, ["Episode", "Movie", "Video", "Audio"]);
 };
 
 function getContentDetails(url) {
-  const parsed = new URL(url);
-  const tokens = parsed.pathname.split("/");
-  const itemId = tokens[tokens.length - 1];
+  const itemId = extractItemId(url);
+
+  if (itemId == null) {
+    throw new ScriptException("Could not parse item id from url");
+  }
 
   const playbackDetails = {
     DeviceProfile: {
@@ -257,7 +259,7 @@ function audioContent(details, mediaSources, itemId) {
     isLive: false,
     description: null,
     video: new VideoSourceDescriptor(sources),
-    url: toUrl(`/Items/${details.Id}?type=Audio`),
+    url: itemWebUrl(details.Id, "Audio"),
   });
 }
 
@@ -282,7 +284,7 @@ function videoContent(details, mediaSources, itemId) {
     description: null,
     subtitles: subtitles,
     video: new VideoSourceDescriptor(sources),
-    url: toUrl(`/Items/${details.Id}?type=Video`),
+    url: itemWebUrl(details.Id, "Video"),
   });
 }
 
@@ -292,16 +294,23 @@ function isChannelUrl(url) {
 };
 
 function getChannel(url) {
-  const req = simpleJsonGet(url);
-  const item = req.body;
-  let parsed = new URL(url);
-  parsed.searchParams.set("type", item.Type);
+  const itemId = extractItemId(url);
+
+  if (itemId == null) {
+    throw new ScriptException("Could not parse channel id");
+  }
+
+  const item = simpleJsonGet(itemApiUrl(itemId)).body;
 
   return formatItem(item);
 };
 
 function getChannelContents(url) {
-  const itemId = urlId(url);
+  const itemId = extractItemId(url);
+
+  if (itemId == null) {
+    throw new ScriptException("Could not parse channel id");
+  }
 
   return new JellyfinContentPager({
     url: toUrl(`/Items?ParentId=${itemId}`),
@@ -315,11 +324,14 @@ function isPlaylistUrl(url) {
 
 function getPlaylist(url) {
   let externalUrls = new Map();
-  let parsed = new URL(url);
+  const itemId = extractItemId(url);
 
-  const item = simpleJsonGet(url).body;
+  if (itemId == null) {
+    throw new ScriptException("Could not parse playlist id");
+  }
+
+  const item = simpleJsonGet(itemApiUrl(itemId)).body;
   const [author] = extractAuthors([item], {});
-  parsed.searchParams.set("type", item.Type);
 
   const contents = new JellyfinContentPager({
     type: item.Type,
@@ -333,7 +345,7 @@ function getPlaylist(url) {
     banner: banner({ item }),
     subscribers: null,
     description: item.Overview,
-    url: parsed.toString(),
+    url: itemWebUrl(item.Id, item.Type),
     links: externalUrls,
     author: author,
     contents: contents,
@@ -408,6 +420,75 @@ function toUrl(path) {
   return `${config.constants.uri}${path}`;
 }
 
+function itemApiUrl(id) {
+  return toUrl(`/Items/${id}`);
+}
+
+function itemWebUrl(id, type) {
+  return toUrl(`/web/#/details?id=${id}&type=${type}`);
+}
+
+function parseUrlParts(url) {
+  const parsed = new URL(url);
+  const segments = parsed.pathname.split("/").filter((segment) => segment.length > 0);
+  const query = parsed.searchParams;
+  const hash = parsed.hash || "";
+  let hashRoute = null;
+  let hashParams = new URLSearchParams("");
+
+  if (hash.startsWith("#/")) {
+    const body = hash.slice(2);
+    const [route, params] = body.split("?", 2);
+    hashRoute = route;
+    hashParams = new URLSearchParams(params || "");
+  } else if (hash.startsWith("#!/")) {
+    const body = hash.slice(3);
+    const [route, params] = body.split("?", 2);
+    hashRoute = route;
+    hashParams = new URLSearchParams(params || "");
+  } else if (url.includes("/web/#/details")) {
+    const params = url.slice(url.indexOf("/web/#/details") + "/web/#/details".length);
+    hashRoute = "details";
+    hashParams = new URLSearchParams(params);
+  } else if (url.includes("/web/index.html#!/details")) {
+    const params = url.slice(url.indexOf("/web/index.html#!/details") + "/web/index.html#!/details".length);
+    hashRoute = "details";
+    hashParams = new URLSearchParams(params);
+  }
+
+  const id =
+    (segments[0] === "Items" && segments.length > 1 ? segments[segments.length - 1] : null) ||
+    query.get("id") ||
+    hashParams.get("id") ||
+    null;
+  const type = query.get("type") || hashParams.get("type") || null;
+  const kind =
+    segments[0] === "Items"
+      ? "items"
+      : hashRoute === "details"
+        ? "detailsHash"
+        : "unknown";
+
+  return {
+    id: id && id.length > 0 ? id : null,
+    type: type && type.length > 0 ? type : null,
+    kind,
+  };
+}
+
+function extractItemId(url) {
+  return parseUrlParts(url).id;
+}
+
+function extractItemType(url) {
+  return parseUrlParts(url).type;
+}
+
+function isKnownItemUrl(url) {
+  const parts = parseUrlParts(url);
+  return parts.kind === "items" || parts.kind === "detailsHash";
+}
+
 function simpleJsonGet(url, error) {
   const resp = simpleGet(url, error);
   resp.body = JSON.parse(resp.body);
@@ -474,46 +555,24 @@ function batchedRequests(requests, error) {
 }
 
 function isType(url, types) {
-  const itemsPrefix = toUrl("/Items");
-  const detailsPrefix = toUrl("/web/#/details");
+  const typeParam = extractItemType(url);
 
-  if (url.startsWith(itemsPrefix)) {
-    const parsed = new URL(url);
-    const typeParam = parsed.searchParams.get("type");
-
-    if (typeParam != null) {
-      return types.includes(typeParam);
-    }
-
-    const segments = parsed.pathname.split("/");
-    const itemId = segments[segments.length - 1];
-    const resp = simpleJsonGet(
-      toUrl(`/Items/${itemId}`),
-      "Could not fetch details",
-    );
-
-    return types.includes(resp.body.Type);
+  if (typeParam != null) {
+    return types.includes(typeParam);
   }
 
-  if (url.startsWith(detailsPrefix)) {
-    const params = new URLSearchParams(url.replace(detailsPrefix, ""));
-    const idParam =
-      (typeof params.get === "function" ? params.get("id") : null) ||
-      params._entries?.id?.[0];
+  const itemId = extractItemId(url);
+  const supportedUrl = isKnownItemUrl(url);
 
-    if (idParam == null) {
-      return false;
-    }
-
-    const resp = simpleJsonGet(
-      toUrl(`/Items/${idParam}`),
-      "Could not fetch details",
-    );
-
-    return types.includes(resp.body.Type);
+  if (itemId == null || !supportedUrl) {
+    return false;
   }
+  const resp = simpleJsonGet(
+    itemApiUrl(itemId),
+    "Could not fetch details",
+  );
 
-  return false;
+  return types.includes(resp.body.Type);
 }
 
 function onlyUnique(value, index, array) {
@@ -575,8 +634,7 @@ function itemThumbnails(itemId) {
 }
 
 function urlId(url) {
-  const segments = new URL(url).pathname.split("/")
-  return segments[segments.length - 1];
+  return extractItemId(url);
 }
 
 function parseItem(item) {
@@ -590,7 +648,7 @@ function parseItem(item) {
         name: item.Name,
         thumbnails: itemThumbnails(item.Id),
         // uploadDate: new Date(item.DateCreated).getTime() / 1000,
-        url: toUrl(`/Items/${item.Id}?type=Video`),
+        url: itemWebUrl(item.Id, "Video"),
         duration: toDuration(item.RunTimeTicks),
         isLive: false,
       });
@@ -603,7 +661,7 @@ function parseItem(item) {
           ? itemThumbnails(item.AlbumId)
           : itemThumbnails(item.Id),
         // uploadDate: new Date(item.DateCreated).getTime() / 1000,
-        url: toUrl(`/Items/${item.Id}?type=Audio`),
+        url: itemWebUrl(item.Id, "Audio"),
         duration: toDuration(item.RunTimeTicks),
         isLive: false,
       });
@@ -613,7 +671,7 @@ function parseItem(item) {
         name: item.Name,
         thumbnails: itemThumbnails(item.Id),
         // uploadDate: new Date(item.DateCreated).getTime() / 1000,
-        url: toUrl(`/Items/${item.Id}?type=Audio`),
+        url: itemWebUrl(item.Id, "Audio"),
         duration: toDuration(item.RunTimeTicks),
         isLive: false,
       });
@@ -632,7 +690,7 @@ function parseItem(item) {
         description: item.Overview,
         thumbnail: thumbnail({ item }),
         banner: banner({ item }),
-        url: toUrl(`/Items/${item.Id}?type=${item.Type}`),
+        url: itemWebUrl(item.Id, item.Type),
         links: item.ExternalUrls?.reduce((acc, item) => {
           acc[item.Name] = item.Url;
           return acc;
@@ -648,7 +706,7 @@ function parseItem(item) {
       return new PlatformPlaylist({
         id: new PlatformID(PLATFORM, item.Id, config.id),
         name: item.Name,
-        url: toUrl(`/Items/${item.Id}?type=${item.Type}`),
+        url: itemWebUrl(item.Id, item.Type),
         thumbnail: banner({ item }),
       });
   }
@@ -709,7 +767,7 @@ function zip(...args) {
 }
 
 function formatItem(item, author) {
-  const url = toUrl(`/Items/${item.Id}?type=${item.Type}`);
+  const url = itemWebUrl(item.Id, item.Type);
 
   switch (item.Type) {
     case "Folder":
@@ -751,18 +809,20 @@ function formatItem(item, author) {
     default:
       switch (item.MediaType) {
         case "Video":
-        case "Audio":
+        case "Audio": {
+          const contentType = item.MediaType || item.Type;
           return new PlatformVideo({
             id: itemId(item),
             author: author,
             name: item.Name,
             thumbnails: itemThumbnails(item.Id),
-            url: url,
+            url: itemWebUrl(item.Id, contentType),
             duration: toDuration(item.RunTimeTicks),
             isLive: false,
             viewCount: item.UserData.PlaybackCount,
             datetime: parseDate(item.PremiereDate || item.DateCreated),
         });
+        }
 
       }
   };
@@ -774,7 +834,7 @@ function itemId(item) {
 }
 
 function itemUrl({ Id, Type }) {
-  return toUrl(`/Items/${Id}?type=${Type}`)
+  return itemWebUrl(Id, Type)
 }
 
 function thumbnail({ item, order = ["Primary", "Logo", "Thumb"], query }) {
@@ -849,6 +909,9 @@ const testExports = {
   JellyfinSearchContentPager,
   authHeaders,
   toUrl,
+  itemApiUrl,
+  itemWebUrl,
+  extractItemId,
   simpleJsonGet,
   simpleGet,
   batchedJSONRequests,

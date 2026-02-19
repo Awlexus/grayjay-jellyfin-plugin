@@ -41,6 +41,8 @@ and start watching your content.
 ## Plugin code
 The plugin source code lives at `assets/js/client.js`.
 It is copied/built to `priv/static/js/client.js` for serving.
+Content URLs emitted by the plugin use Jellyfin web details paths
+(`.../web/#/details?id=<id>&type=<Type>`) so Grayjay can open pages directly.
 
 ## TDD workflow
 

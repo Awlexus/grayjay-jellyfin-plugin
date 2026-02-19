@@ -130,6 +130,8 @@ contract('getContentDetails returns a source descriptor for first search result'
   assert.ok(suggestionsPager.results.length > 0);
 
   const first = suggestionsPager.results[0];
+  assert.ok(first.url.includes('/web/#/details?id='));
+  assert.ok(first.url.includes('&type='));
   const details = runtime.client.getContentDetails(first.url);
 
   assert.ok(details != null);
