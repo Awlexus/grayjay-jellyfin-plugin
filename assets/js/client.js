@@ -359,7 +359,7 @@ function audioContent(details, mediaSource, itemId) {
     id: new PlatformID(PLATFORM, details.Id, config.id),
     author: author,
     name: details.Name,
-    thumbnails: itemThumbnails(details.AlbumId),
+    thumbnails: audioDetailThumbnails(details),
     dateTime:
       new Date(details.PremiereDate || details.DateCreated).getTime() / 1000,
     duration: toDuration(details.RunTimeTicks),
@@ -737,6 +737,44 @@ function itemThumbnails(itemId) {
     new Thumbnail(url3, 720),
     new Thumbnail(url4, 1080),
   ]);
+}
+
+function taggedItemThumbnails(itemId, tag, imageType = "Primary") {
+  let url = new URL(toUrl(`/Items/${itemId}/Images/${imageType}`));
+  url.searchParams.set("tag", tag);
+  url.searchParams.set("quality", "50");
+
+  url.searchParams.set("fillWidth", "240");
+  let url1 = url.toString();
+
+  url.searchParams.set("fillWidth", "480");
+  let url2 = url.toString();
+
+  url.searchParams.set("fillWidth", "720");
+  let url3 = url.toString();
+
+  url.searchParams.set("fillWidth", "1080");
+  let url4 = url.toString();
+
+  return new Thumbnails([
+    new Thumbnail(url1, 240),
+    new Thumbnail(url2, 480),
+    new Thumbnail(url3, 720),
+    new Thumbnail(url4, 1080),
+  ]);
+}
+
+function audioDetailThumbnails(details) {
+  if (details?.AlbumId && details?.AlbumPrimaryImageTag) {
+    return taggedItemThumbnails(details.AlbumId, details.AlbumPrimaryImageTag);
+  }
+
+  const primaryTag = details?.ImageTags?.Primary || details?.PrimaryImageTag;
+  if (details?.Id && primaryTag) {
+    return taggedItemThumbnails(details.Id, primaryTag);
+  }
+
+  return itemThumbnails(details.AlbumId || details.Id);
 }
 
 function urlId(url) {

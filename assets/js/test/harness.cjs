@@ -23,6 +23,7 @@ function installGlobals(httpImpl) {
     PlatformPlaylist: global.PlatformPlaylist,
     PlatformPlaylistDetails: global.PlatformPlaylistDetails,
     VideoSourceDescriptor: global.VideoSourceDescriptor,
+    UnMuxVideoSourceDescriptor: global.UnMuxVideoSourceDescriptor,
     VideoUrlSource: global.VideoUrlSource,
     AudioUrlSource: global.AudioUrlSource,
     HLSSource: global.HLSSource,
@@ -70,9 +71,37 @@ function installGlobals(httpImpl) {
       }
     }
   };
-  global.VideoUrlSource = SimpleModel;
-  global.AudioUrlSource = SimpleModel;
-  global.HLSSource = SimpleModel;
+  global.UnMuxVideoSourceDescriptor = class UnMuxVideoSourceDescriptor {
+    constructor(videoSourcesOrObj, audioSources) {
+      this.isUnMuxed = true;
+      if (Array.isArray(videoSourcesOrObj)) {
+        this.videoSources = videoSourcesOrObj;
+        this.audioSources = audioSources || [];
+      } else {
+        const obj = videoSourcesOrObj || {};
+        this.videoSources = obj.videoSources || [];
+        this.audioSources = obj.audioSources || [];
+      }
+    }
+  };
+  global.VideoUrlSource = class VideoUrlSource extends SimpleModel {
+    constructor(obj) {
+      super(obj);
+      this.plugin_type = 'VideoUrlSource';
+    }
+  };
+  global.AudioUrlSource = class AudioUrlSource extends SimpleModel {
+    constructor(obj) {
+      super(obj);
+      this.plugin_type = 'AudioUrlSource';
+    }
+  };
+  global.HLSSource = class HLSSource extends SimpleModel {
+    constructor(obj) {
+      super(obj);
+      this.plugin_type = 'HLSSource';
+    }
+  };
 
   global.Thumbnails = class Thumbnails {
     constructor(sources) {

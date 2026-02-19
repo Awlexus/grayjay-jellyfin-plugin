@@ -536,6 +536,139 @@ test('getContentDetails deduplicates transcoding URLs across presets', () => {
   }
 });
 
+test('getContentDetails keeps working audio playback path and uses album cover tag for thumbnails', () => {
+  const mock = createMockHttp({
+    batchQueue: [[
+      {
+        isOk: true,
+        body: JSON.stringify({
+          Id: 'audio-1',
+          Type: 'Audio',
+          Name: 'Track One',
+          AlbumId: 'album-1',
+          AlbumPrimaryImageTag: 'album-cover-tag',
+          DateCreated: '2024-01-01T00:00:00Z',
+          PremiereDate: '2024-01-01T00:00:00Z',
+          RunTimeTicks: 120_000_000,
+        }),
+      },
+      {
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [
+            {
+              Id: 'baseline',
+              SupportsDirectPlay: true,
+              RunTimeTicks: 120_000_000,
+              Container: 'mp3',
+              MediaStreams: [
+                {
+                  Type: 'Audio',
+                  Container: 'mp3',
+                  Codec: 'mp3',
+                  BitRate: 320_000,
+                },
+              ],
+            },
+          ],
+        }),
+      },
+      ...[1, 2, 3, 4, 5].map(() => ({
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [],
+        }),
+      })),
+    ]],
+  });
+  const runtime = loadClient(mock.http);
+
+  try {
+    runtime.client.enable(defaultConfig());
+
+    const details = runtime.client.getContentDetails('https://jf.example/web/#/details?id=audio-1&type=Audio');
+    const descriptor = details.video;
+
+    assert.ok(Array.isArray(descriptor.videoSources));
+    assert.equal(descriptor.videoSources.length, 1);
+    assert.equal(descriptor.videoSources[0].plugin_type, 'AudioUrlSource');
+    assert.equal(
+      details.thumbnails.sources[0].url.includes('/Items/album-1/Images/Primary'),
+      true,
+    );
+    assert.equal(
+      details.thumbnails.sources[0].url.includes('tag=album-cover-tag'),
+      true,
+    );
+  } finally {
+    runtime.restore();
+  }
+});
+
+test('getContentDetails keeps transcode-only audio playable and uses track image tag fallback', () => {
+  const mock = createMockHttp({
+    batchQueue: [[
+      {
+        isOk: true,
+        body: JSON.stringify({
+          Id: 'audio-2',
+          Type: 'Audio',
+          Name: 'Track Two',
+          ImageTags: { Primary: 'track-cover-tag' },
+          DateCreated: '2024-01-01T00:00:00Z',
+          PremiereDate: '2024-01-01T00:00:00Z',
+          RunTimeTicks: 120_000_000,
+        }),
+      },
+      {
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [
+            {
+              Id: 'baseline',
+              SupportsDirectPlay: false,
+              RunTimeTicks: 120_000_000,
+              Container: 'aac',
+              TranscodingUrl: '/Audio/audio-2/universal',
+              RequiredHttpHeaders: { 'X-Media': 'audio' },
+              MediaStreams: [],
+            },
+          ],
+        }),
+      },
+      ...[1, 2, 3, 4, 5].map(() => ({
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [],
+        }),
+      })),
+    ]],
+  });
+  const runtime = loadClient(mock.http);
+
+  try {
+    runtime.client.enable(defaultConfig());
+
+    const details = runtime.client.getContentDetails('https://jf.example/web/#/details?id=audio-2&type=Audio');
+    const descriptor = details.video;
+
+    assert.ok(Array.isArray(descriptor.videoSources));
+    assert.equal(descriptor.videoSources.length, 1);
+    assert.equal(descriptor.videoSources[0].plugin_type, 'HLSSource');
+    assert.equal(descriptor.videoSources[0].url, 'https://jf.example/Audio/audio-2/universal');
+    assert.equal(
+      details.thumbnails.sources[0].url.includes('/Items/audio-2/Images/Primary'),
+      true,
+    );
+    assert.equal(
+      details.thumbnails.sources[0].url.includes('tag=track-cover-tag'),
+      true,
+    );
+  } finally {
+    runtime.restore();
+  }
+});
+
 test('getPlaylist resolves web details URL to item API and emits web details URL', () => {
   const mock = createMockHttp({
     getQueue: [
