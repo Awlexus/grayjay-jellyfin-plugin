@@ -61,7 +61,15 @@ function installGlobals(httpImpl) {
   global.PlatformChannel = SimpleModel;
   global.PlatformPlaylist = SimpleModel;
   global.PlatformPlaylistDetails = SimpleModel;
-  global.VideoSourceDescriptor = SimpleModel;
+  global.VideoSourceDescriptor = class VideoSourceDescriptor {
+    constructor(videoSourcesOrObj) {
+      if (Array.isArray(videoSourcesOrObj)) {
+        this.videoSources = videoSourcesOrObj;
+      } else {
+        Object.assign(this, videoSourcesOrObj || {});
+      }
+    }
+  };
   global.VideoUrlSource = SimpleModel;
   global.AudioUrlSource = SimpleModel;
   global.HLSSource = SimpleModel;

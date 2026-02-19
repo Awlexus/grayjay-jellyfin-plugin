@@ -337,6 +337,205 @@ test('getContentDetails parses item id from /Items URL even with different host'
   }
 });
 
+test('getContentDetails includes original source first and quality ladder variants', () => {
+  const mock = createMockHttp({
+    batchQueue: [[
+      {
+        isOk: true,
+        body: JSON.stringify({
+          Id: 'movie-1',
+          Type: 'Movie',
+          Name: 'Movie One',
+          DateCreated: '2024-01-01T00:00:00Z',
+          RunTimeTicks: 120_000_000,
+        }),
+      },
+      {
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [
+            {
+              Id: 'baseline',
+              SupportsDirectPlay: true,
+              RunTimeTicks: 120_000_000,
+              Container: 'mp4',
+              MediaStreams: [
+                { Type: 'Video', Codec: 'h264', Width: 1920, Height: 1080 },
+              ],
+            },
+          ],
+        }),
+      },
+      {
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [{ Id: 'v1', RunTimeTicks: 120_000_000, TranscodingUrl: '/Videos/movie-1/hls/main.m3u8?tag=1', RequiredHttpHeaders: { 'X-Test': '1' } }],
+        }),
+      },
+      {
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [{ Id: 'v2', RunTimeTicks: 120_000_000, TranscodingUrl: '/Videos/movie-1/hls/main.m3u8?tag=2', RequiredHttpHeaders: { 'X-Test': '2' } }],
+        }),
+      },
+      {
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [{ Id: 'v3', RunTimeTicks: 120_000_000, TranscodingUrl: '/Videos/movie-1/hls/main.m3u8?tag=3', RequiredHttpHeaders: { 'X-Test': '3' } }],
+        }),
+      },
+      {
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [{ Id: 'v4', RunTimeTicks: 120_000_000, TranscodingUrl: '/Videos/movie-1/hls/main.m3u8?tag=4', RequiredHttpHeaders: { 'X-Test': '4' } }],
+        }),
+      },
+      {
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [{ Id: 'v5', RunTimeTicks: 120_000_000, TranscodingUrl: '/Videos/movie-1/hls/main.m3u8?tag=5', RequiredHttpHeaders: { 'X-Test': '5' } }],
+        }),
+      },
+    ]],
+  });
+  const runtime = loadClient(mock.http);
+
+  try {
+    runtime.client.enable(defaultConfig());
+
+    const details = runtime.client.getContentDetails('https://jf.example/web/#/details?id=movie-1&type=Video');
+    const sources = details.video.videoSources;
+
+    assert.equal(sources[0].name, 'Original');
+    assert.deepEqual(
+      sources.slice(1).map((source) => source.name),
+      ['1080p 30 Mbps', '1080p 8 Mbps', '720p 4 Mbps', '480p 2 Mbps', '360p 1 Mbps'],
+    );
+    assert.equal(sources.length, 6);
+    assert.equal(sources[1].requestModifier.headers['X-Test'], '1');
+  } finally {
+    runtime.restore();
+  }
+});
+
+test('getContentDetails returns ladder-only sources when direct play is unavailable', () => {
+  const mock = createMockHttp({
+    batchQueue: [[
+      {
+        isOk: true,
+        body: JSON.stringify({
+          Id: 'movie-2',
+          Type: 'Movie',
+          Name: 'Movie Two',
+          DateCreated: '2024-01-01T00:00:00Z',
+          RunTimeTicks: 120_000_000,
+        }),
+      },
+      {
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [
+            {
+              Id: 'baseline',
+              SupportsDirectPlay: false,
+              RunTimeTicks: 120_000_000,
+              TranscodingUrl: '/Videos/movie-2/hls/auto.m3u8',
+              MediaStreams: [],
+            },
+          ],
+        }),
+      },
+      ...[1, 2, 3, 4, 5].map((index) => ({
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [{ Id: `v${index}`, RunTimeTicks: 120_000_000, TranscodingUrl: `/Videos/movie-2/hls/p${index}.m3u8` }],
+        }),
+      })),
+    ]],
+  });
+  const runtime = loadClient(mock.http);
+
+  try {
+    runtime.client.enable(defaultConfig());
+
+    const details = runtime.client.getContentDetails('https://jf.example/web/#/details?id=movie-2&type=Video');
+    const sources = details.video.videoSources;
+
+    assert.equal(sources[0].name, '1080p 30 Mbps');
+    assert.equal(sources.length, 5);
+    assert.ok(sources.every((source) => source.name !== 'Original'));
+  } finally {
+    runtime.restore();
+  }
+});
+
+test('getContentDetails deduplicates transcoding URLs across presets', () => {
+  const mock = createMockHttp({
+    batchQueue: [[
+      {
+        isOk: true,
+        body: JSON.stringify({
+          Id: 'movie-3',
+          Type: 'Movie',
+          Name: 'Movie Three',
+          DateCreated: '2024-01-01T00:00:00Z',
+          RunTimeTicks: 120_000_000,
+        }),
+      },
+      {
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [{ Id: 'baseline', SupportsDirectPlay: false, RunTimeTicks: 120_000_000, MediaStreams: [] }],
+        }),
+      },
+      {
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [{ Id: 'v1', RunTimeTicks: 120_000_000, TranscodingUrl: '/Videos/movie-3/hls/shared.m3u8' }],
+        }),
+      },
+      {
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [{ Id: 'v2', RunTimeTicks: 120_000_000, TranscodingUrl: '/Videos/movie-3/hls/shared.m3u8' }],
+        }),
+      },
+      {
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [{ Id: 'v3', RunTimeTicks: 120_000_000, TranscodingUrl: '/Videos/movie-3/hls/unique-3.m3u8' }],
+        }),
+      },
+      {
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [{ Id: 'v4', RunTimeTicks: 120_000_000, TranscodingUrl: '/Videos/movie-3/hls/unique-4.m3u8' }],
+        }),
+      },
+      {
+        isOk: true,
+        body: JSON.stringify({
+          MediaSources: [{ Id: 'v5', RunTimeTicks: 120_000_000, TranscodingUrl: '/Videos/movie-3/hls/unique-5.m3u8' }],
+        }),
+      },
+    ]],
+  });
+  const runtime = loadClient(mock.http);
+
+  try {
+    runtime.client.enable(defaultConfig());
+
+    const details = runtime.client.getContentDetails('https://jf.example/web/#/details?id=movie-3&type=Video');
+    const sources = details.video.videoSources;
+    const urls = sources.map((source) => source.url);
+
+    assert.equal(new Set(urls).size, urls.length);
+    assert.equal(sources.length, 4);
+  } finally {
+    runtime.restore();
+  }
+});
+
 test('getPlaylist resolves web details URL to item API and emits web details URL', () => {
   const mock = createMockHttp({
     getQueue: [

@@ -1,5 +1,12 @@
 let config = {};
 const PLATFORM = "Jellyfin";
+const VIDEO_QUALITY_PRESETS = [
+  { name: "1080p 30 Mbps", maxHeight: 1080, maxBitrate: 30_000_000 },
+  { name: "1080p 8 Mbps", maxHeight: 1080, maxBitrate: 8_000_000 },
+  { name: "720p 4 Mbps", maxHeight: 720, maxBitrate: 4_000_000 },
+  { name: "480p 2 Mbps", maxHeight: 480, maxBitrate: 2_000_000 },
+  { name: "360p 1 Mbps", maxHeight: 360, maxBitrate: 1_000_000 },
+];
 
 source.enable = enable;
 source.disable = disable;
@@ -145,29 +152,45 @@ function getContentDetails(url) {
       ],
     },
   };
+  const playbackRequestPayloads = [
+    playbackDetails,
+    ...VIDEO_QUALITY_PRESETS.map((preset) => ({
+      ...playbackDetails,
+      MaxStreamingBitrate: preset.maxBitrate,
+      MaxHeight: preset.maxHeight,
+    })),
+  ];
 
-  const [details, mediaSources] = batchedJSONRequests([
+  const [details, ...playbackInfos] = batchedJSONRequests([
     { url: toUrl(`/Items/${itemId}?fields=DateCreated`) },
-    {
+    ...playbackRequestPayloads.map((payload) => ({
       url: toUrl(`/Items/${itemId}/PlaybackInfo`),
-      body: JSON.stringify(playbackDetails),
-    },
+      body: JSON.stringify(payload),
+    })),
   ]);
+  const playbackVariants = playbackInfos.map((response, index) => ({
+    preset: index === 0 ? null : VIDEO_QUALITY_PRESETS[index - 1],
+    mediaSource: primaryMediaSource(response.body),
+  }));
+  const baselineMediaSource = playbackVariants[0]?.mediaSource;
 
   switch (details.body.Type) {
     case "Episode":
     case "Movie":
-      return videoContent(details.body, mediaSources.body, itemId);
+      return videoContent(details.body, playbackVariants, itemId);
 
     case "Audio":
-      return audioContent(details.body, mediaSources.body, itemId);
+      return audioContent(details.body, baselineMediaSource, itemId);
   }
 };
 
 function extractSources(details, mediaSource, itemId) {
+  if (mediaSource == null) {
+    return { sources: [], subtitles: [] };
+  }
+
   let sources = [];
-  let subtitles = [];
-  const hls = mediaSource.TranscodingUrl != null;
+  const hls = mediaSource?.TranscodingUrl != null;
 
   // Use hls streams if media cannot be directly played
   if (hls) {
@@ -211,37 +234,122 @@ function extractSources(details, mediaSource, itemId) {
     }
   }
 
-  for (const mediaStream of mediaSource.MediaStreams) {
-    if (mediaStream.Type == "Subtitle") {
-      const url = toUrl(
-        `/Videos/${details.Id}/${mediaSource.Id}/Subtitles/${mediaStream.Index}/0/Stream.vtt`,
-      );
+  return { sources, subtitles: buildSubtitles(details, mediaSource) };
+}
 
-      subtitles.push({
-        name: mediaStream.DisplayTitle,
-        url: url,
-        format: "text/vtt",
+function primaryMediaSource(playbackInfo) {
+  if (playbackInfo == null) return null;
+  if (!Array.isArray(playbackInfo.MediaSources)) return null;
+  if (playbackInfo.MediaSources.length === 0) return null;
+  return playbackInfo.MediaSources[0];
+}
 
-        getSubtitles() {
-          const resp = http.GET(url, authHeaders(), false);
+function supportsDirectPlay(mediaSource) {
+  return mediaSource?.SupportsDirectPlay === true || mediaSource?.TranscodingUrl == null;
+}
 
-          if (!resp.isOk) {
-            throw new ScriptException(error || "Could not fetch subtitles");
-          }
+function buildOriginalVideoSource(mediaSource, itemId) {
+  const videoStream = (mediaSource?.MediaStreams || []).find((stream) => stream.Type == "Video");
+  if (videoStream == null) return null;
 
-          return resp.body;
-        },
-      });
+  return new VideoUrlSource({
+    codec: videoStream.Codec || videoStream.codec,
+    name: "Original",
+    width: videoStream.Width,
+    height: videoStream.Height,
+    duration: toDuration(mediaSource.RunTimeTicks),
+    container: `video/${mediaSource.Container}`,
+    url: toUrl(`/Videos/${itemId}/stream`),
+  });
+}
+
+function buildHlsVariantSource(mediaSource, preset) {
+  if (mediaSource?.TranscodingUrl == null || preset == null) return null;
+
+  return new HLSSource({
+    name: preset.name,
+    url: toUrl(mediaSource.TranscodingUrl),
+    duration: toDuration(mediaSource.RunTimeTicks),
+    priority: false,
+    requestModifier: { headers: mediaSource.RequiredHttpHeaders },
+  });
+}
+
+function dedupeSourcesByUrl(sources) {
+  const seen = new Set();
+  const result = [];
+
+  for (const source of sources) {
+    if (source == null || source.url == null) continue;
+    if (seen.has(source.url)) continue;
+    seen.add(source.url);
+    result.push(source);
+  }
+
+  return result;
+}
+
+function buildSubtitles(details, mediaSource) {
+  let subtitles = [];
+
+  for (const mediaStream of mediaSource?.MediaStreams || []) {
+    if (mediaStream.Type != "Subtitle") continue;
+
+    const url = toUrl(
+      `/Videos/${details.Id}/${mediaSource.Id}/Subtitles/${mediaStream.Index}/0/Stream.vtt`,
+    );
+
+    subtitles.push({
+      name: mediaStream.DisplayTitle,
+      url: url,
+      format: "text/vtt",
+
+      getSubtitles() {
+        const resp = http.GET(url, authHeaders(), false);
+
+        if (!resp.isOk) {
+          throw new ScriptException(error || "Could not fetch subtitles");
+        }
+
+        return resp.body;
+      },
+    });
+  }
+
+  return subtitles;
+}
+
+function buildVideoSources(playbackVariants, itemId) {
+  const baselineMediaSource = playbackVariants[0]?.mediaSource;
+  let sources = [];
+
+  if (baselineMediaSource != null && supportsDirectPlay(baselineMediaSource)) {
+    const originalSource = buildOriginalVideoSource(baselineMediaSource, itemId);
+    if (originalSource != null) {
+      sources.push(originalSource);
     }
   }
 
-  return { sources, subtitles };
+  for (const variant of playbackVariants) {
+    if (variant.preset == null) continue;
+    const source = buildHlsVariantSource(variant.mediaSource, variant.preset);
+    if (source != null) {
+      sources.push(source);
+    }
+  }
+
+  if (sources.length === 0 && baselineMediaSource != null) {
+    const { sources: fallbackSources } = extractSources({}, baselineMediaSource, itemId);
+    sources = sources.concat(fallbackSources);
+  }
+
+  return dedupeSourcesByUrl(sources);
 }
 
-function audioContent(details, mediaSources, itemId) {
+function audioContent(details, mediaSource, itemId) {
   let { sources, _subtitles } = extractSources(
     details,
-    mediaSources.MediaSources[0],
+    mediaSource,
     itemId,
   );
 
@@ -263,12 +371,10 @@ function audioContent(details, mediaSources, itemId) {
   });
 }
 
-function videoContent(details, mediaSources, itemId) {
-  let { sources, subtitles } = extractSources(
-    details,
-    mediaSources.MediaSources[0],
-    itemId,
-  );
+function videoContent(details, playbackVariants, itemId) {
+  const baselineMediaSource = playbackVariants[0]?.mediaSource;
+  const subtitles = buildSubtitles(details, baselineMediaSource);
+  const sources = buildVideoSources(playbackVariants, itemId);
 
   const [author] = extractAuthors([details], {});
 
